@@ -1,0 +1,82 @@
+#!/usr/bin/expect -f
+
+# =============================================================================
+# JumpServer Connect — automated SSH through bastion to target host
+#
+# Usage:
+#   connect.exp <jump_key> <jump_user> <jump_host> <jump_port> <search_term> [exact_host]
+#
+# Examples:
+#   # Connect to unique host by exact name
+#   connect.exp ~/.ssh/key.pem user@host 2222 冰川-新
+#
+#   # Search then pick from results
+#   connect.exp ~/.ssh/key.pem user@host 2222 冰川 冰川-新
+# =============================================================================
+
+set timeout 45
+
+if {$argc < 5} {
+    puts "Usage: connect.exp <jump_key> <jump_user> <jump_host> <jump_port> <search_term> \[exact_host\]"
+    exit 1
+}
+
+set jump_key    [lindex $argv 0]
+set jump_user   [lindex $argv 1]
+set jump_host   [lindex $argv 2]
+set jump_port   [lindex $argv 3]
+set search_term [lindex $argv 4]
+set exact_host  [lindex $argv 5]
+
+# ----- Connect to JumpServer -----
+spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+           -i $jump_key ${jump_user}@${jump_host} -p${jump_port}
+
+# ----- Wait for JumpServer menu -----
+expect {
+    "Opt>" {
+        send "$search_term\r"
+    }
+    timeout {
+        puts "ERROR: Timeout waiting for JumpServer prompt"
+        exit 1
+    }
+}
+
+# ----- If exact host specified, handle [Host]> prompt -----
+if {$exact_host ne ""} {
+    expect {
+        "\[Host\]>" {
+            send "$exact_host\r"
+        }
+        -re "开始连接到" {
+            # Unique match, auto-connected — nothing more to do
+        }
+        timeout {
+            puts "ERROR: Timeout waiting for host selection prompt"
+            exit 1
+        }
+    }
+}
+
+# ----- Wait for target shell -----
+expect {
+    -re {\[root@|\[.*@.*\]#|\$ |# } {
+        puts "\n========================================="
+        puts "Connected to target host successfully."
+        puts "========================================="
+    }
+    timeout {
+        puts "WARNING: Connected but no shell prompt detected (slow network or TTY issue)."
+    }
+}
+
+# ----- Determine mode: interactive terminal vs piped -----
+if {[catch {exec tty 2>/dev/null} tty_result]} {
+    # Non-TTY mode (WorkBuddy Bash tool) — exit immediately
+    send "exit\r"
+    expect eof
+} else {
+    # Interactive mode (user's terminal) — hand over control
+    interact
+}
