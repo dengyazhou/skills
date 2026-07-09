@@ -1,0 +1,51 @@
+{
+  "target": {
+    "name": "邓亚洲",
+    "open_id": "ou_5eeeb400fca2933b73c83116b4de1258",
+    "aliases": ["亚洲", "Yazhou"]
+  },
+  "output": {
+    "dir": "/Users/thinkingdata-yazhou/Desktop/dyz_claude_ai/project/ticketRecord/output",
+    "weekly_dir_convention": "每周一在 output.dir 下创建以当天日期(YYYY-MM-DD)命名的文件夹，本周工单记录在该文件夹中",
+    "filename_template": "工单记录_{title}_{date}.md"
+  },
+  "feishu_project": {
+    "enabled": true,
+    "project_key": "63d628c174aaec42a602e8b7",
+    "work_item_type": "64095b6f4ce7cbe30d7cb660",
+    "customer_type": "63d6294c8c8701d932467ffc",
+    "schedule_node_id": "state_7",
+    "defaults": {
+      "points": 0.1,
+      "field_values": {
+        "template": "214223",
+        "field_f91b3e": "v64s_gkxw",
+        "field_13a7c4": "g5ux8cyh7",
+        "field_41ff92": "ect59pjg4",
+        "field_c69400": "myuc7fu7p",
+        "priority": "option_2"
+      }
+    },
+    "field_mapping": {
+      "title": "name",
+      "customer_name": "field_f66fb1",
+      "customer_id": "field_e1b6e7",
+      "问题描述": "field_d42436",
+      "排查过程": "field_d264eb",
+      "问题总结": "field_80a262"
+    },
+    "naming": {
+      "format": "{customer_short_name}-{title}",
+      "description": "工单名称格式: 客户简称-问题标题。customer_short_name 从飞书项目客户名称中提取（括号内文本，如'（呸喽）'→'呸喽'）；无括号则用完整名称"
+    }
+  },
+  "review": {
+    "enabled": true,
+    "rules": [
+      "不确定的细节不写：如果原文来自截图/图片且无法读取具体内容，只描述'指导修改配置'，不猜测具体配置项名称",
+      "区分来源：文档链接中的 version 与实际 SDK 版本是两个概念，不混为一谈",
+      "生成前列出'待确认细节'：将推断性结论（如版本号归属、配置项名称、API名称等）单独列出，让用户确认后再写入"
+    ]
+  },
+  "_comment": "target 指定要聚焦总结的对象(只提炼对该对象的提问及其回答);修改 name/open_id/aliases 即可切换对象。output.dir 为工单记录的存档目录,filename_template 支持占位符 {title}(项目/群名)与 {date}(YYYYMMDD)。feishu_project 为飞书项目同步配置,enabled=false 时不执行同步。review.enabled=true 时,生成工单前必须展示待确认细节供用户审核。"
+}
