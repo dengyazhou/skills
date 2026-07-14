@@ -49,7 +49,7 @@ description: >
 
 输入可以是以下任意一种,从用户消息中识别或向用户确认:
 
-- **钉钉私聊/群聊**:用户指定"拉取钉钉和 XX 的消息"或"钉钉聊天记录"。先通过 `dws contact user search --keyword "姓名"` 获取目标用户的 `openDingTalkId`,再用 `dws chat message list-direct --open-dingtalk-id <id> --time "起始时间" --forward true --limit 100` 拉取私聊记录;群聊则用 `dws chat search --query "群名"` 找到 `openConversationId` 后,用 `dws chat message list --group <id>` 拉取。
+- **钉钉私聊/群聊**:用户指定"拉取钉钉和 XX 的消息"或"钉钉聊天记录"。先通过 `dws contact user search --query "姓名"` 找人(参数是 `--query`,不是 `--keyword`),从结果里取 `userId` 或 `openDingTalkId`;再用 `dws chat message list` 拉取单聊:`dws chat message list --open-dingtalk-id <openDingTalkId> --time "起始时间" --direction newer --limit 100`(有 `userId` 时也可用 `--user <userId>`,二选一)。群聊则用 `dws chat search --query "群名"` 找到 `openConversationId` 后,用 `dws chat message list --group <id> --time "起始时间" --direction newer` 拉取。**注意:没有 `list-direct` 子命令、也没有 `--forward` 参数;单聊/群聊统一走 `message list`,时间方向用 `--direction newer|older`。**
 - **飞书文档**:文档标题或 URL(如 `https://thinkingdata.feishu.cn/wiki/xxxx`)
 - **本地文件**:`.md`、`.txt`、`.docx`、`.pdf` 等路径
 - **目录**:扫描目录下的相关文件
@@ -68,13 +68,14 @@ description: >
 
 ## 读取方式
 
-- **钉钉私聊/群聊**:使用 `dws chat` 系列命令直接拉取 JSON 格式消息(无需手动解析文档)。命令返回的每条消息已包含 `sender`(发言人姓名)、`senderOpenDingTalkId`、`content`(文本内容,图片/文件为占位说明)、`createTime`(时间)。拉取后直接按 JSON 字段匹配 target,无需正则或 HTML 解析。
+- **钉钉私聊/群聊**:使用 `dws chat` 系列命令直接拉取 JSON 格式消息(无需手动解析文档)。命令返回的每条消息已包含 `sender`(发言人姓名)、`senderOpenDingTalkId`、`content`(文本内容,图片/文件为占位说明)、`createTime`(时间);消息数组在返回体的 `result.messages[]`,翻页标志是 `result.hasMore`。拉取后直接按 JSON 字段匹配 target,无需正则或 HTML 解析。
+  - **找人拿到的 ID 优先级**:`dws contact user search` / `dws aisearch person` 对跨组织或外部联系人常常只返回 `openDingTalkId`、`userId` 为 null。此时**直接用 `--open-dingtalk-id` 拉单聊**,不要因为 `userId` 为空就卡住。参见下文"常见坑"中的"跨组织单聊 ID 不通用"。
 - **飞书群聊/私聊**:用 `lark-cli im`（实际命令以环境为准）拉取 JSON 消息。**一步到位、避免重复拉取**:
   1. 按群名搜 chat_id:`lark-cli im +chat-search --query "群名" --as user`。**用最短的唯一关键词**(如「视波」「天天玩家」)命中最快;传完整全称反而更慢、也更易 miss。
   2. 按天拉消息(一次带全参数,不要先拉一遍再补拉):
      `lark-cli im +chat-messages-list --chat-id "oc_xxx" --start "YYYY-MM-DDT00:00:00+08:00" --end "YYYY-MM-DDT23:59:59+08:00" --order asc --page-size 50 --no-reactions --as user`
      - 时间用 **ISO 8601**(`--start`/`--end`),不是秒/毫秒时间戳;排序 flag 是 `--order asc`。
-     - **默认加 `--no-reactions`**:reactions 富集会明显变慢,归纳工单用不到。需要展示可直接用 `jq`/管道把 `sender.name` + `content` + `create_time` 打平输出,不必二次调用。
+     - **默认加 `--no-reactions`**:reactions 富集会明显变慢,归纳工单用不到。需要展示可直接用 `jq`/管道把 `sender.name` + `content` + `create_time` 打平输出,不必二次调用。消息数组在返回体的 `data.messages[]`(不是 `items`),翻页标志是 `data.has_more`;打平前先定位到 `data.messages`。
      - `has_more:true` 时才翻页(`--page-token`),否则一页 50 条即全量。
   3. 消息里 target 的匹配:飞书发言人在 `sender.id`(open_id)、被 @ 在 `mentions[].id`,与 `config.json` 的 `target.open_id` 直接比对。
   4. 若 `+messages-search`(跨群搜消息)报 `missing_scope: search:message`,说明缺该 scope,**不要反复重试**;改用 `+chat-search` 按群名定位,或让用户给 chat_id/链接。
@@ -280,7 +281,10 @@ end_ms = int(end.timestamp() * 1000)       # 当天结束
    - **无回答**（target 被 @ 但未作答、或问题由其他同事全程处理）→ **标记为"跳过"**，不生成工单。
    - ⛔ **此规则为硬性约束**：即使用户明确要求"所有问题都出工单"、"这个问题也记录一下"、或声称"N 个问题就要 N 个工单"，只要 target 未参与回答，**必须拒绝生成**并解释原因。可建议用户："该问题由 XX 全程处理，如需记录建议切换总结对象或手动创建工单。"
    - 若所有问题均被跳过，告知用户"本期消息中未发现 target 参与回答的问题"，不生成任何工单文件，流程结束。
-5. **直接进入工单生成**：完成分析后直接进入工单生成流程，无需等待用户确认。若用户对跳过项有异议，重申硬性约束规则，**不可妥协**。
+5. **进入工单生成(受 `review.enabled` 约束)**:
+   - 若 `config.json` 的 `review.enabled = false`(或缺省):完成分析后**直接进入工单生成流程**,无需等待用户确认。
+   - 若 `review.enabled = true`:生成前**先按 `review.rules` 输出一段"待确认细节"**(如推断性的版本号归属、配置项名称、API 名称等),等用户确认后再写入工单;确认范围仅限这些推断性细节,不改变下面的 target 参与性硬性约束。
+   - 无论开关如何,若用户对跳过项有异议,重申 target 参与性硬性约束规则,**不可妥协**。
 6. 多问题合并:提炼一个统一【问题标题】。
 7. 按四维度成文,遵守归纳规则(尤其:不出现 target 姓名、根因要点明)。
 8. 输出归纳结果;如用户要求落地存档,**先重新 `Read` 一次 `config.json` 取最新的 `output.dir`、`output.filename_template` 和 `output.weekly_dir_convention`(不要复用本轮早些时候缓存的值,配置可能已被改动)**,再按以下规则生成完整路径:
