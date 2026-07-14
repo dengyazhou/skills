@@ -15,6 +15,7 @@
     "work_item_type": "64095b6f4ce7cbe30d7cb660",
     "customer_type": "63d6294c8c8701d932467ffc",
     "schedule_node_id": "state_7",
+    "verify_after_sync": false,
     "defaults": {
       "points": 0.1,
       "field_values": {
