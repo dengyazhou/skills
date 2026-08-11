@@ -6,7 +6,7 @@
   },
   "output": {
     "dir": "/Users/thinkingdata-yazhou/Desktop/dyz_claude_ai/project/ticketRecord/output",
-    "weekly_dir_convention": "每周一在 output.dir 下创建以当天日期(YYYY-MM-DD)命名的文件夹，本周工单记录在该文件夹中",
+    "weekly_dir_convention": "周目录 = 【执行归档当天】所属周的周一日期(YYYY-MM-DD)，在 output.dir 下插入一层。注意：以记录当天算，不是以对话发生日期算。文件名中的 {date} 才取对话发生日期。例：2026-08-04(周二)归档一条 07-31 的对话 → 目录 2026-08-03、文件名 ..._20260731.md。output 下已有的周日命名目录(2026-06-22 等)为早期遗留，不代表现行规则",
     "filename_template": "工单记录_{title}_{date}.md"
   },
   "feishu_project": {
@@ -15,7 +15,6 @@
     "work_item_type": "64095b6f4ce7cbe30d7cb660",
     "customer_type": "63d6294c8c8701d932467ffc",
     "schedule_node_id": "state_7",
-    "verify_after_sync": false,
     "defaults": {
       "points": 0.1,
       "field_values": {
