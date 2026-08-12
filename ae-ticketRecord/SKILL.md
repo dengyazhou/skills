@@ -32,6 +32,8 @@ description: >
 - `output.dir`:工单记录的**存档目录**
 - `output.filename_template`:文件名模板,支持占位符 `{title}`(项目/群名)与 `{date}`(YYYYMMDD)
 - `output.weekly_dir_convention`:周目录规则(若存在)。规则含义:在 `output.dir` 下插入一层周目录,目录名为**执行归档当天所属周的周一日期**(YYYY-MM-DD)。⚠️ 以**记录当天**算,**不是**以对话发生日期算;文件名中的 `{date}` 才取对话发生日期
+- `feishu_project.ticket_type`:「工单类型_内容」字段配置(见「工单类型_内容 自动分类」)
+- `feishu_project.ticket_type_ts`:「工单类型_TS」字段配置(见「工单类型_TS 自动分类」)
 
 后续归纳**只围绕这个 target 展开**。若 `config.json` 缺失或无法读取,先提示用户配置后再继续。
 
@@ -157,6 +159,55 @@ e. 验证: 输出总消息数，如明显偏少（如 < 10 条但文件体积较
 
 需飞书项目 MCP 已连接（`mcp__FeishuProjectMcp__*` 系列工具可用），且拥有对目标空间的读写权限。
 
+### 工单类型_内容 自动分类
+
+**字段**:`feishu_project.ticket_type.field_key`(当前为 `field_f91b3e`,select)。
+同步时**必须根据问题性质从三个选项中选择**,**不得固定写死为"问题排查"**。选项及判定规则:
+
+| 类型 | option_id | 特征 | 典型场景 |
+|---|---|---|---|
+| **日常咨询** | `ckj86uudm` | 纯知识/流程性问答,不涉及故障、数据异常或修复诉求;target 以"回答/解释/给指引"即可闭环,无需排查定位 | SDK 如何获取/下载、索取文档/链接、某功能是否支持、如何配置/接入、版本咨询 |
+| **问题排查** | `v64s_gkxw` | 客户报告实际异常/故障/数据问题,需定位原因;最终由客户侧处理或仅解释原因,数数侧**无开发/修复/升级动作** | 数据拉取失败、上报不到/查不到数据、数据延迟/差异/丢失/重复、任务失败、报错、压测异常、组件不可用 |
+| **内部需求/问题修复** | `w6mxbmakg` | 数数侧需执行**开发/修复/升级/内部变更**并有落地动作 | SDK 缺陷需更新版本修复、LogBus/组件升级、产品功能修复、数据修复/回溯、内部需求跟进 |
+
+**判断优先级**(同一工单可能混合多类,按下述顺序判定,命中即止):
+
+1. **最终存在数数侧修复/升级/开发/内部变更落地** → `内部需求/问题修复`(判定锚点:【问题总结】中出现"已更新 SDK / 已修复 / 需升级 / 新版本已提供 / 内部跟进 / 研发处理"等数数侧动作)
+2. **否则,存在实际故障/异常并经排查定位根因**(由客户侧处理或仅解释原因)→ `问题排查`(判定锚点:【排查过程】有定位动作,【问题总结】为"定位根因,客户侧处理/解释原因")
+3. **否则,纯问答/咨询、无故障** → `日常咨询`(判定锚点:全程无排查、无修复,答完即闭环)
+
+判断时以工单【问题描述】【排查过程】【问题总结】三部分整体为依据,忠实原文,不臆测。若拿不准,在交付时把选定的类型列入"待确认细节"供用户复核。
+
+### 工单类型_TS 自动分类
+
+**字段**:`feishu_project.ticket_type_ts.field_key`(当前为 `field_c69400`,tree-select,**单选一个叶子节点**)。
+同步时**根据问题所属的技术域/环节选择最贴合的叶子节点**,**不得固定写死为"数据集成/客户端SDK"**。完整选项树(含 option_id)见 `config.json` 的 `ticket_type_ts.options`。常用映射:
+
+| 问题归属(技术域) | TS 类型(路径) | 典型场景 |
+|---|---|---|
+| 客户端 SDK | 数据集成 > 客户端SDK | Android/iOS/Web/Unity/Cocos/鸿蒙/快游戏等客户端 SDK 接入、上报、配置、日志、SDK 缺陷 |
+| 服务端 SDK | 数据集成 > 服务端SDK | Go/Python/Java 等服务端 SDK 上报问题 |
+| Restful API | 数据集成 > Restful API | 服务端 Restful API 上报(返回 -1、字段缺失、鉴权等) |
+| LogBus | 数据集成 > Logbus | 日志传输卡住、LogBus 安装/升级/配置(含升级 LogBus2) |
+| 三方平台数据 | 数据集成 > 三方数据集成 | 巨量/广点通/Unity Ads/AdMob/AppsFlyer 等第三方广告、归因平台的数据拉取与接入 |
+| 其他数据接入工具 | 数据集成 > 对应子项 | DataX、BatchImporter、DataTransfer、Logstash、二开工具、TE数据规则等 |
+| 数据差异/质量 | 数据差异 > 对应子项 | 数据丢失、数据延迟、数据重复、错误入库、用户绑定、数据量排查 |
+| 分析平台功能 | 分析产品 > 对应子项 | 看板报表、分析模型、标签分群、数据表、埋点管理、指标预警、项目/系统管理、OpenAPI |
+| 运营任务 | 运营产品 > 对应子项 | 推送/运营任务异常、通道异常、运营数据异常 |
+| 组件/集群 | 组件异常 > 对应组件 或 集群卡顿 | Presto/Trino/Kafka/Hive/Kudu 等组件异常、集群卡顿、任务调度失败(调度方案) |
+| 数据操作单项 | 对应叶子 | 历史数据导入、实时数据接入、数据导出、数据删除、数据去重、数据修复、外表映射、三方脚本迁移 |
+| 方案类 | 技术方案 > 对应子项 或 方案设计 | 数据集成方案、数据修复方案、数据导出方案、非标准方案、跨源/多集群/跨项目方案 |
+| AE Agent | AE Agent > AE Agent | AE Agent 相关问题 |
+| 功能测试验证 | 功能测试验证 | 版本验证、功能验收测试 |
+
+**判断优先级**:
+
+1. 先定位问题**发生的环节**(客户端SDK / 服务端SDK / Restful API / LogBus / 三方集成 / 数据差异 / 分析产品 / 运营产品 / 组件异常 / 数据操作单项 / 技术方案 等),选择对应的叶子节点。
+2. 无法明确归入上述技术域时,选择语义最贴近的叶子;仍拿不准时列入"待确认细节"供用户复核。
+3. 两个类型字段**独立判断、同时设置**:
+   - 「工单类型_内容」= 处理**性质**(日常咨询 / 问题排查 / 内部需求/问题修复)
+   - 「工单类型_TS」= 问题所属**技术环节**(如 SDK 缺陷需更新版本 → 内容=内部需求/问题修复、TS=数据集成>客户端SDK)
+
 ### 同步步骤
 
 #### 1. 读取配置与工单内容
@@ -188,7 +239,14 @@ mcp__FeishuProjectMcp__search_by_mql
 
 若模板中使用的是 `{customer_name}`，则直接使用飞书项目中的完整客户名称。
 
-#### 4. 创建工单
+#### 4. 判断工单类型字段
+
+- **工单类型_内容**(`ticket_type.field_key`):按「工单类型_内容 自动分类」规则三选一。
+- **工单类型_TS**(`ticket_type_ts.field_key`):按「工单类型_TS 自动分类」规则选择叶子 option_id(对应父级路径)。
+
+两个字段各自独立判断,均不得使用固定默认值。
+
+#### 5. 创建工单
 
 ```
 mcp__FeishuProjectMcp__create_workitem
@@ -201,10 +259,12 @@ mcp__FeishuProjectMcp__create_workitem
     - field_key: <field_mapping.问题描述> → 【问题描述】内容
     - field_key: <field_mapping.排查过程> → 【排查过程】内容
     - field_key: <field_mapping.问题总结> → 【问题总结】内容
+    - field_key: <ticket_type.field_key> → 步骤 4 判断的工单类型_内容 option_id
+    - field_key: <ticket_type_ts.field_key> → 步骤 4 判断的工单类型_TS 叶子 option_id
     - 合并 defaults.field_values 中的全部默认值
 ```
 
-#### 5. 设置排期与估分
+#### 6. 设置排期与估分
 
 创建成功后,用 `update_node` 设置默认排期和估分。**必须传 `clear_schedule: true`**,否则排期日期不会生效：
 
@@ -216,31 +276,39 @@ mcp__FeishuProjectMcp__update_node
   node_schedule:
     clear_schedule: true
     points: <defaults.points>
-    estimate_start_date: <当天 00:00:00 毫秒时间戳>
-    estimate_end_date: <当天 23:59:59 毫秒时间戳>
+    estimate_start_date: <对话发生日期 00:00:00 毫秒时间戳>
+    estimate_end_date: <对话发生日期 23:59:59 毫秒时间戳>
     owners: ["<当前用户 open_id>"]
 ```
 
-时间戳计算方式（北京时间 CST, UTC+8）:
+**排期日期取对话发生日期**（依据 `feishu_project.schedule_date`）：
+- 取**对话开始日期**（与文件名 `{date}` 一致）；跨天对话取开始日期
+- **不取执行当天**
+- 若无法确定对话日期，退回执行当天并列入"待确认细节"
+
+时间戳计算方式（北京时间 CST, UTC+8），以对话发生日期为例：
 ```python
 from datetime import datetime, timezone, timedelta
 cst = timezone(timedelta(hours=8))
-start = datetime(2026, 6, 24, 0, 0, 0, tzinfo=cst)
-end = datetime(2026, 6, 24, 23, 59, 59, tzinfo=cst)
-start_ms = int(start.timestamp() * 1000)   # 当天起始
-end_ms = int(end.timestamp() * 1000)       # 当天结束
+start = datetime(2026, 8, 11, 0, 0, 0, tzinfo=cst)   # 对话发生日期
+end = datetime(2026, 8, 11, 23, 59, 59, tzinfo=cst)
+start_ms = int(start.timestamp() * 1000)   # 对话日期起始
+end_ms = int(end.timestamp() * 1000)       # 对话日期结束
 ```
 
-#### 6. 验证同步结果
+#### 7. 验证同步结果
 
-用 `get_workitem_brief` 或 `search_by_mql` 回读确认工单名称、排期、估分已正确写入。若字段内容与本地文件不一致,**以本地文件为准**用 `update_field` 修正。
+用 `get_workitem_brief` 或 `search_by_mql` 回读确认工单名称、排期、估分、工单类型已正确写入。若字段内容与本地文件不一致,**以本地文件为准**用 `update_field` 修正。
 
 ### 关键规则
 
 1. **以本地文件为准**——所有字段内容以本地工单文件为准,不在同步时额外增删内容。
 2. **客户名称以飞书项目为准**——群聊名称可能与飞书项目客户名称不一致,创建工单时取飞书项目中查到的正式客户名称。
 3. **`clear_schedule: true` 必传**——不传此参数排期日期不会写入节点。
+3b. **总排期按对话发生日期**——`estimate_start_date/estimate_end_date` 取对话开始日期（跨天取开始日期），不取执行当天。
 4. **同步失败不阻塞本地**——若飞书项目 MCP 不可用或创建失败,本地工单文件照常生成,提示用户手动同步。
+5. **工单类型动态判断**——`ticket_type.field_key`(工单类型_内容)必须按「工单类型_内容 自动分类」规则三选一,**禁止固定为"问题排查"**。
+6. **工单类型_TS 动态判断**——`ticket_type_ts.field_key`(工单类型_TS)必须按「工单类型_TS 自动分类」规则选择叶子节点,**禁止固定为"数据集成/客户端SDK"**。
 
 ## 执行步骤
 
@@ -264,7 +332,7 @@ end_ms = int(end.timestamp() * 1000)       # 当天结束
    4. 若 `weekly_dir_convention` 不存在或为空,则路径 = `output.dir` / `filename_template 渲染结果`(无周目录层)。
    5. ⚠️ `output.dir` 下可能存在早期遗留的**周日**命名目录(如 `2026-06-22`、`2026-06-29`),**不代表现行规则**,不要参照它们反推口径。
    5. 若目录不存在则先 `mkdir -p` 创建完整路径。
-9. 若用户要求同步到飞书项目（或 `feishu_project.enabled` 且未跳过）,按「同步到飞书项目」章节执行。
+9. 若用户要求同步到飞书项目（或 `feishu_project.enabled` 且未跳过）,按「同步到飞书项目」章节执行,其中「工单类型_内容」「工单类型_TS」均按自动分类规则判断,不固定默认值。
 10. **输出跳过报告**：若步骤 4 中有问题被跳过（target 未参与回答），在所有工单生成完毕后，追加一段摘要告知用户哪些内容未生成工单：
 
 ```

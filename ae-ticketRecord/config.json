@@ -2,7 +2,10 @@
   "target": {
     "name": "邓亚洲",
     "open_id": "ou_5eeeb400fca2933b73c83116b4de1258",
-    "aliases": ["亚洲", "Yazhou"]
+    "aliases": [
+      "亚洲",
+      "Yazhou"
+    ]
   },
   "output": {
     "dir": "/Users/thinkingdata-yazhou/Desktop/dyz_claude_ai/project/ticketRecord/output",
@@ -19,12 +22,379 @@
       "points": 0.1,
       "field_values": {
         "template": "214223",
-        "field_f91b3e": "v64s_gkxw",
         "field_13a7c4": "g5ux8cyh7",
         "field_41ff92": "ect59pjg4",
-        "field_c69400": "myuc7fu7p",
         "priority": "option_2"
       }
+    },
+    "ticket_type": {
+      "field_key": "field_f91b3e",
+      "note": "工单类型_内容(select)。同步时按问题性质自动选择，不再固定默认值；分类判断规则见 SKILL.md「工单类型_内容 自动分类」",
+      "options": {
+        "日常咨询": "ckj86uudm",
+        "问题排查": "v64s_gkxw",
+        "内部需求/问题修复": "w6mxbmakg"
+      }
+    },
+    "ticket_type_ts": {
+      "field_key": "field_c69400",
+      "note": "工单类型_TS(tree-select，单选叶子节点)。同步时按问题所属技术域自动选择叶子节点(路径=父级>子项)，不再固定默认值；判断规则见 SKILL.md「工单类型_TS 自动分类」。options 为飞书项目实时查询到的完整选项树(option_id 以此为准)",
+      "options": [
+        {
+          "option_id": "9bmoh63ke",
+          "option_name": "数据集成",
+          "children": [
+            {
+              "option_id": "myuc7fu7p",
+              "option_name": "客户端SDK"
+            },
+            {
+              "option_id": "k8qnnb3b2",
+              "option_name": "服务端SDK"
+            },
+            {
+              "option_id": "3b0mr7ymx",
+              "option_name": "三方数据集成"
+            },
+            {
+              "option_id": "j9ojxdn3j",
+              "option_name": "Logbus"
+            },
+            {
+              "option_id": "kz8kx930i",
+              "option_name": "Restful API"
+            },
+            {
+              "option_id": "euaewp42c",
+              "option_name": "DataX"
+            },
+            {
+              "option_id": "a8okvwf10",
+              "option_name": "二开工具"
+            },
+            {
+              "option_id": "zj1sb0ywx",
+              "option_name": "TE数据规则"
+            },
+            {
+              "option_id": "y0n_4t9u3",
+              "option_name": "数据处理规则"
+            },
+            {
+              "option_id": "p5mhpc2vp",
+              "option_name": "BatchImporter"
+            },
+            {
+              "option_id": "078d7s6l_",
+              "option_name": "DataTransfer"
+            },
+            {
+              "option_id": "hllnhnw_f",
+              "option_name": "Logstash"
+            }
+          ]
+        },
+        {
+          "option_id": "izuadycxq",
+          "option_name": "数据差异",
+          "children": [
+            {
+              "option_id": "w634gkk9i",
+              "option_name": "数据丢失"
+            },
+            {
+              "option_id": "3ijhymieu",
+              "option_name": "数据延迟"
+            },
+            {
+              "option_id": "oeabgqohb",
+              "option_name": "数据重复"
+            },
+            {
+              "option_id": "96wqv1wcd",
+              "option_name": "错误入库"
+            },
+            {
+              "option_id": "ot4e8p635",
+              "option_name": "用户绑定"
+            },
+            {
+              "option_id": "wveclavok",
+              "option_name": "数据量排查"
+            },
+            {
+              "option_id": "4fkbrb5py",
+              "option_name": "其他"
+            }
+          ]
+        },
+        {
+          "option_id": "x7ze1w9ix",
+          "option_name": "分析产品",
+          "children": [
+            {
+              "option_id": "w070k2b8q",
+              "option_name": "看板报表"
+            },
+            {
+              "option_id": "axiz3szm5",
+              "option_name": "分析模型"
+            },
+            {
+              "option_id": "tjynof3hz",
+              "option_name": "标签分群"
+            },
+            {
+              "option_id": "299k6atn1",
+              "option_name": "数据表"
+            },
+            {
+              "option_id": "d78i_zjyv",
+              "option_name": "开封箱"
+            },
+            {
+              "option_id": "n1di4sh0g",
+              "option_name": "OpenAPI"
+            },
+            {
+              "option_id": "jy9ku43rl",
+              "option_name": "数据管理"
+            },
+            {
+              "option_id": "cxotdnpdx",
+              "option_name": "埋点管理"
+            },
+            {
+              "option_id": "cqoydpto_",
+              "option_name": "项目管理"
+            },
+            {
+              "option_id": "gzk6ox5cs",
+              "option_name": "系统管理"
+            },
+            {
+              "option_id": "r12gm9tgw",
+              "option_name": "三方登录"
+            },
+            {
+              "option_id": "bgf_8wewu",
+              "option_name": "指标预警"
+            },
+            {
+              "option_id": "bps5b01fp",
+              "option_name": "跨项目方案"
+            },
+            {
+              "option_id": "2q9x5rql_",
+              "option_name": "多集群方案"
+            },
+            {
+              "option_id": "0n8p9cgvx",
+              "option_name": "跨源映射方案"
+            },
+            {
+              "option_id": "fubb00lax",
+              "option_name": "页面嵌入方案"
+            },
+            {
+              "option_id": "lxl_5ywum",
+              "option_name": "审计项目"
+            }
+          ]
+        },
+        {
+          "option_id": "uiiimoq22",
+          "option_name": "运营产品",
+          "children": [
+            {
+              "option_id": "46hq0mol2",
+              "option_name": "通道异常"
+            },
+            {
+              "option_id": "jk9_snayi",
+              "option_name": "任务异常"
+            },
+            {
+              "option_id": "pv48fs8d9",
+              "option_name": "数据异常"
+            },
+            {
+              "option_id": "ymv5tdfo0",
+              "option_name": "功能异常"
+            },
+            {
+              "option_id": "2p2jzp_kk",
+              "option_name": "运营产品"
+            }
+          ]
+        },
+        {
+          "option_id": "jf0rgouha",
+          "option_name": "数开产品",
+          "children": [
+            {
+              "option_id": "u4ahuadnw",
+              "option_name": "数开产品"
+            }
+          ]
+        },
+        {
+          "option_id": "hrri0hct4",
+          "option_name": "AE Agent",
+          "children": [
+            {
+              "option_id": "t8m1cmibk",
+              "option_name": "AE Agent"
+            }
+          ]
+        },
+        {
+          "option_id": "fbj6qt9xq",
+          "option_name": "集群卡顿",
+          "children": [
+            {
+              "option_id": "b9gbpwvfq",
+              "option_name": "集群卡顿"
+            }
+          ]
+        },
+        {
+          "option_id": "w_eqs33ss",
+          "option_name": "组件异常",
+          "children": [
+            {
+              "option_id": "gq47h7ln7",
+              "option_name": "develop-tool"
+            },
+            {
+              "option_id": "bz3mdui66",
+              "option_name": "Receiver"
+            },
+            {
+              "option_id": "58ey66ijs",
+              "option_name": "转接点"
+            },
+            {
+              "option_id": "w1_tl2o4p",
+              "option_name": "Kafka"
+            },
+            {
+              "option_id": "k40zy7bbw",
+              "option_name": "ETL"
+            },
+            {
+              "option_id": "7qmb5k3v6",
+              "option_name": "Kudu"
+            },
+            {
+              "option_id": "cnr_jr14f",
+              "option_name": "Hive"
+            },
+            {
+              "option_id": "xb1wfgnfn",
+              "option_name": "Trino"
+            },
+            {
+              "option_id": "57a_o4h7m",
+              "option_name": "DolphinScheduler"
+            },
+            {
+              "option_id": "xdf8b4s0j",
+              "option_name": "MySQL"
+            }
+          ]
+        },
+        {
+          "option_id": "3pw4eydpn",
+          "option_name": "技术方案",
+          "children": [
+            {
+              "option_id": "yck748rxj",
+              "option_name": "数据集成方案"
+            },
+            {
+              "option_id": "p7i8kbgwi",
+              "option_name": "数据修复方案"
+            },
+            {
+              "option_id": "9f6lf11e3",
+              "option_name": "数据导出方案"
+            },
+            {
+              "option_id": "mill37267",
+              "option_name": "非标准方案"
+            },
+            {
+              "option_id": "bezvbpgn2",
+              "option_name": "TE系统架构"
+            }
+          ]
+        },
+        {
+          "option_id": "wwcuzde8a",
+          "option_name": "方案设计"
+        },
+        {
+          "option_id": "7_8sf_uwm",
+          "option_name": "历史数据导入"
+        },
+        {
+          "option_id": "n9fcwzam9",
+          "option_name": "实时数据接入"
+        },
+        {
+          "option_id": "fuwl59jqi",
+          "option_name": "数据删除"
+        },
+        {
+          "option_id": "x1aa7e3ch",
+          "option_name": "数据去重"
+        },
+        {
+          "option_id": "rac5qfv2f",
+          "option_name": "数据修复"
+        },
+        {
+          "option_id": "h9pe_ifuy",
+          "option_name": "数据导出"
+        },
+        {
+          "option_id": "it8t7b9or",
+          "option_name": "产品功能修复"
+        },
+        {
+          "option_id": "ubzssz4uv",
+          "option_name": "三方登录"
+        },
+        {
+          "option_id": "gdjbg6k7l",
+          "option_name": "跨项目方案"
+        },
+        {
+          "option_id": "8ra4usic3",
+          "option_name": "外表映射"
+        },
+        {
+          "option_id": "q0pouz5yg",
+          "option_name": "多集群方案"
+        },
+        {
+          "option_id": "qbz7928pw",
+          "option_name": "跨源映射方案"
+        },
+        {
+          "option_id": "nm7pq1605",
+          "option_name": "调度方案"
+        },
+        {
+          "option_id": "2bl2zl2lr",
+          "option_name": "三方脚本迁移"
+        },
+        {
+          "option_id": "taue7xdqo",
+          "option_name": "功能测试验证"
+        }
+      ]
     },
     "field_mapping": {
       "title": "name",
@@ -37,6 +407,10 @@
     "naming": {
       "format": "{customer_short_name}-{title}",
       "description": "工单名称格式: 客户简称-问题标题。customer_short_name 从飞书项目客户名称中提取（括号内文本，如'（呸喽）'→'呸喽'）；无括号则用完整名称"
+    },
+    "schedule_date": {
+      "note": "总排期日期 = 对话发生日期(取对话开始日期,与文件名 {date} 一致;跨天对话取开始日期),不取执行当天。时间戳按该日 00:00:00~23:59:59(CST) 计算",
+      "basis": "chat_start_date"
     }
   },
   "review": {
@@ -47,5 +421,5 @@
       "生成前列出'待确认细节'：将推断性结论（如版本号归属、配置项名称、API名称等）单独列出，让用户确认后再写入"
     ]
   },
-  "_comment": "target 指定要聚焦总结的对象(只提炼对该对象的提问及其回答);修改 name/open_id/aliases 即可切换对象。output.dir 为工单记录的存档目录,filename_template 支持占位符 {title}(项目/群名)与 {date}(YYYYMMDD)。feishu_project 为飞书项目同步配置,enabled=false 时不执行同步。review.enabled=true 时,生成工单前必须展示待确认细节供用户审核。"
+  "_comment": "target 指定要聚焦总结的对象(只提炼对该对象的提问及其回答);修改 name/open_id/aliases 即可切换对象。output.dir 为工单记录的存档目录,filename_template 支持占位符 {title}(项目/群名)与 {date}(YYYYMMDD)。feishu_project 为飞书项目同步配置,enabled=false 时不执行同步。ticket_type 为「工单类型_内容」(field_f91b3e,三选一);ticket_type_ts 为「工单类型_TS」(field_c69400,tree-select 单选叶子);两者均由 SKILL.md 中的自动分类规则动态判断,禁止固定默认值。review.enabled=true 时,生成工单前必须展示待确认细节供用户审核。 schedule_date 规定总排期日期按对话发生日期(开始日期)填写,而非执行当天。"
 }
