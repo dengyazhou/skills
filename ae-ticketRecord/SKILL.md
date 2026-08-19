@@ -290,19 +290,22 @@ mcp__FeishuProjectMcp__update_node
     owners: ["<当前用户 open_id>"]
 ```
 
-**排期日期取对话发生日期**（依据 `feishu_project.schedule_date`）：
-- 取**对话开始日期**（与文件名 `{date}` 一致）；跨天对话取开始日期
+**排期日期取对话发生日期范围**（依据 `feishu_project.schedule_date`）：
+- 排期起始 = **对话开始日期** 00:00:00（与文件名 `{date}` 一致）
+- 排期结束 = **对话结束日期** 23:59:59
+- **单日对话**：开始=结束=对话发生日期
+- **跨天对话**：排期覆盖 开始日 00:00:00 ~ 结束日 23:59:59 的完整时间范围
 - **不取执行当天**
 - 若无法确定对话日期，退回执行当天并列入"待确认细节"
 
-时间戳计算方式（北京时间 CST, UTC+8），以对话发生日期为例：
+时间戳计算方式（北京时间 CST, UTC+8），以跨天对话为例：
 ```python
 from datetime import datetime, timezone, timedelta
 cst = timezone(timedelta(hours=8))
-start = datetime(2026, 8, 11, 0, 0, 0, tzinfo=cst)   # 对话发生日期
-end = datetime(2026, 8, 11, 23, 59, 59, tzinfo=cst)
-start_ms = int(start.timestamp() * 1000)   # 对话日期起始
-end_ms = int(end.timestamp() * 1000)       # 对话日期结束
+start = datetime(2026, 8, 17, 0, 0, 0, tzinfo=cst)   # 对话开始日期
+end = datetime(2026, 8, 18, 23, 59, 59, tzinfo=cst)  # 对话结束日期
+start_ms = int(start.timestamp() * 1000)   # 开始日期起始
+end_ms = int(end.timestamp() * 1000)       # 结束日期结束
 ```
 
 #### 7. 验证同步结果
@@ -314,7 +317,7 @@ end_ms = int(end.timestamp() * 1000)       # 对话日期结束
 1. **以本地文件为准**——所有字段内容以本地工单文件为准,不在同步时额外增删内容。
 2. **客户名称以飞书项目为准**——群聊名称可能与飞书项目客户名称不一致,创建工单时取飞书项目中查到的正式客户名称。
 3. **`clear_schedule: true` 必传**——不传此参数排期日期不会写入节点。
-3b. **总排期按对话发生日期**——`estimate_start_date/estimate_end_date` 取对话开始日期（跨天取开始日期），不取执行当天。
+3b. **总排期按对话发生日期范围**——`estimate_start_date` 取对话开始日期 00:00:00、`estimate_end_date` 取对话结束日期 23:59:59（跨天覆盖完整时间范围；单日开始=结束），不取执行当天。
 4. **同步失败不阻塞本地**——若飞书项目 MCP 不可用或创建失败,本地工单文件照常生成,提示用户手动同步。
 5. **工单类型动态判断**——`ticket_type.field_key`(工单类型_内容)必须按「工单类型_内容 自动分类」规则三选一,**禁止固定为"问题排查"**。
 6. **工单类型_TS 动态判断**——`ticket_type_ts.field_key`(工单类型_TS)必须按「工单类型_TS 自动分类」规则选择叶子节点,**禁止固定为"数据集成/客户端SDK"**。
