@@ -1,18 +1,21 @@
 ---
 name: jumpserver-connect
-description: 通过 SSH 连接数数科技客户 JumpServer 堡垒机，自动化登录目标主机。当用户需要连接客户服务器、登录堡垒机、访问客户主机，或提到 jumpserver-customer.thinkingdata.cn 时触发。
+description: 通过 SSH 连接数数科技 JumpServer 堡垒机（客户/内部），自动化登录目标主机。当用户需要连接客户服务器、登录堡垒机、访问客户主机，或提到 jumpserver-customer.thinkingdata.cn / jumpserver-inner-v4.thinkingdata.cn 时触发。
 agent_created: true
 ---
 
 # JumpServer 堡垒机连接
 
-通过 expect 脚本全自动 SSH 登录 JumpServer 堡垒机并连接到目标主机。
+通过 expect 脚本全自动 SSH 登录 JumpServer 堡垒机并连接到目标主机。支持**客户堡垒机**与**内部堡垒机**两套配置。
 
 ## 工作流
 
-### 第一步：读取配置
+### 第一步：确定堡垒机类型并读取配置
 
-读取 `references/config.md` 获取 SSH 连接参数（密钥、用户、地址、端口）。
+- **内部堡垒机**：用户提到"内部"、"内网"、"inner"、`jumpserver-inner` → 用 `references/config.md` 中「内部堡垒机」参数。
+- **客户堡垒机**（默认）：未特别说明时一律走客户堡垒机 → 用 `references/config.md` 中「客户堡垒机」参数。
+
+读取对应段落的 SSH 连接参数（密钥、用户、地址、端口）。
 
 ### 第二步：确定目标主机
 
@@ -35,6 +38,7 @@ expect <skill_dir>/scripts/connect.exp \
   <搜索词>
 ```
 
+> 参数取自第一步确定的堡垒机配置段（客户/内部）。
 > `<skill_dir>` 动态解析：SKILL.md 文件所在的目录即为 skill 根目录，无需硬编码绝对路径。
 
 ## 脚本：scripts/connect.exp
