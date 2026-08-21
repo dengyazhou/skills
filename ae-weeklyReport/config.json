@@ -1,0 +1,74 @@
+{
+  "target": {
+    "name": "邓亚洲",
+    "open_id": "ou_5eeeb400fca2933b73c83116b4de1258",
+    "aliases": ["亚洲", "Yazhou", "yazhou.TD"]
+  },
+  "sources": {
+    "tickets": {
+      "enabled": true,
+      "dir": "/Users/thinkingdata-yazhou/Desktop/dyz_claude_ai/project/ticketRecord/output",
+      "weekly_dir_convention": "output.dir 下以周一日期(YYYY-MM-DD)命名的目录即本周工单归档目录",
+      "title_pattern": "问题标题",
+      "_comment": "工单文件名格式 工单记录_{客户}_{日期}.md；文件内首个【问题标题】即为工单主题"
+    },
+    "feishu_docs": {
+      "enabled": true,
+      "filter_by": "edit_user_id",
+      "max_pages": 15,
+      "page_size": 20,
+      "_comment": "用 lark-cli docs +search 空 query 翻页拉取，按 edit_user_id == target.open_id 且 update_time >= 周一零点 过滤。结果按 last_open_time 排序而非 update_time，必须翻满 max_pages 不能提前 break"
+    },
+    "git_repos": {
+      "enabled": true,
+      "repos": [
+        {
+          "path": "/Users/thinkingdata-yazhou/Desktop/dyz_claude_ai/ta_sourcecode/tech-support/diagnose-studio",
+          "label": "diagnose-studio",
+          "category": "AI 工具建设",
+          "note": "排查子 Agent，对应 O1 KR2"
+        },
+        {
+          "path": "/Users/thinkingdata-yazhou/Desktop/dyz_claude_ai/project/skills",
+          "label": "skills",
+          "category": "AI 工具建设",
+          "note": "工单归纳/周报 skill，对应 O2 KR2.1"
+        }
+      ],
+      "_comment": "git log --author 用 'yazhou.TD\\|邓亚洲' 同时匹配两种署名"
+    },
+    "codex_sessions": {
+      "enabled": false,
+      "dir": "/Users/thinkingdata-yazhou/.codex/sessions",
+      "_comment": "默认关闭。Codex 会话噪声大（大量 reviewer session），且用户通常不需要。需要时置 true"
+    }
+  },
+  "output": {
+    "doc_title_template": "{target} 本周工作汇总 {start}~{end}",
+    "sections": ["飞书文档更新", "AI 工具建设", "工单记录", "本周主线"],
+    "ascii_title_fallback": "weekly-{start_short}-{end_short}",
+    "_comment": "中文标题偶发触发审批审核超时；连续失败 2 次时先用 ascii_title_fallback 建文档，再用 str_replace 改回中文标题"
+  },
+  "okr": {
+    "enabled": true,
+    "cycle_hint": "当前季度周期，用 +cycle-list 按 start_time/end_time 包含今天筛选",
+    "kr_mapping": [
+      {
+        "kr_id": "7659330176421514223",
+        "kr_name": "持续沉淀技术支持文档，丰富智能客服知识库",
+        "feeds_from": ["feishu_docs"]
+      },
+      {
+        "kr_id": "7659330220026629103",
+        "kr_name": "开发上线问题排查子Agent",
+        "feeds_from": ["git_repos.diagnose-studio"]
+      },
+      {
+        "kr_id": "7659330176422530031",
+        "kr_name": "覆盖团队内部办公全面 AI 化，实现工单、周报、TQA 报告等事务自动化提效",
+        "feeds_from": ["tickets", "git_repos.skills"]
+      }
+    ],
+    "_comment": "kr_id 每季度换周期后会变，需用 +cycle-detail 重新获取并更新此处"
+  }
+}
