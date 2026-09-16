@@ -35,7 +35,7 @@
           "note": "工单归纳/周报 skill，对应 O2 KR2.1"
         }
       ],
-      "_comment": "git log --author 用 'yazhou.TD\\|邓亚洲' 同时匹配两种署名"
+      "_comment": "git log --author 用 'yazhou.TD\\|邓亚洲' 同时匹配两种署名。注意 --since/--until 可能静默失效，见 SKILL.md"
     },
     "codex_sessions": {
       "enabled": false,
@@ -47,10 +47,15 @@
     "doc_title_template": "{target} 本周工作汇总 {start}~{end}",
     "sections": ["飞书文档更新", "AI 工具建设", "工单记录", "本周主线"],
     "ascii_title_fallback": "weekly-{start_short}-{end_short}",
-    "_comment": "中文标题偶发触发审批审核超时；连续失败 2 次时先用 ascii_title_fallback 建文档，再用 str_replace 改回中文标题"
+    "wiki_parent_node_token": "Ur7vw9dhsicOTvkNqHjcQYr3nyf",
+    "wiki_space_id": "7314274064414457859",
+    "wiki_parent_title": "周总结",
+    "one_doc_per_week": true,
+    "_comment": "周报文档固定建在 wiki「周总结」目录（wiki_parent_node_token）下。one_doc_per_week=true 表示每周只保留一份周报文档：先查该目录下是否已有本周文档，有则 overwrite 更新，无则 wiki +node-create 新建，禁止在同一周内新建第二份。中文标题偶发触发审批审核超时；连续失败 2 次时先用 ascii_title_fallback 建文档，再用 str_replace 改回中文标题"
   },
   "okr": {
     "enabled": true,
+    "auto_sync": false,
     "cycle_hint": "当前季度周期，用 +cycle-list 按 start_time/end_time 包含今天筛选",
     "kr_mapping": [
       {
@@ -69,6 +74,6 @@
         "feeds_from": ["tickets", "git_repos.skills"]
       }
     ],
-    "_comment": "kr_id 每季度换周期后会变，需用 +cycle-detail 重新获取并更新此处"
+    "_comment": "auto_sync=false 表示汇总后默认只生成飞书文档、不自动写 OKR；仅当用户明确要求「同步 OKR」时才执行第五步。kr_id 每季度换周期后会变，需用 +cycle-detail 重新获取并更新此处"
   }
 }

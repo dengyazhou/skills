@@ -1,11 +1,12 @@
 ---
 name: ae-weeklyReport
 description: >
-  汇总指定对象本周工作并同步到飞书文档与 OKR。从四类数据源采集：工单归档目录、
+  汇总指定对象本周工作并生成飞书周报文档。从四类数据源采集：工单归档目录、
   飞书文档更新记录、git 仓库提交、Codex 会话（可选），归纳为
   【飞书文档更新】【AI 工具建设】【工单记录】【本周主线】四段结构化周报，
-  先在对话中展示供用户增删条目，确认后写入飞书云文档并按 KR 映射写入 OKR 进展。
-  数据源、KR 映射由本 skill 目录下的 config.json 配置。
+  先在对话中展示供用户增删条目，确认后在固定 wiki 目录下写入/更新本周周报文档
+  （每周只保留一份）；OKR 进展默认不同步，仅当用户明确要求时按 KR 映射写入。
+  数据源、输出目录、KR 映射由本 skill 目录下的 config.json 配置。
   触发词：周报、本周工作、总结本周、工作汇总、weeklyReport、ae-weeklyReport、同步到OKR。
 agent_created: true
 ---
@@ -13,14 +14,22 @@ agent_created: true
 # ae-weeklyReport
 
 把一周散落在多处的工作痕迹（工单、文档、代码提交）汇总成一份周报，
-再双向同步到飞书云文档和 OKR 进展。
+写入飞书云文档；OKR 进展按需追加。
 
-**核心节奏：并行采集 → 展示待确认 → 用户增删 → 同步。**
+**核心节奏：并行采集 → 展示待确认 → 用户增删 → 生成文档（→ 可选写 OKR）。**
 
-> ⛔ **硬性约束：先展示，后同步**
-> 采集完成后**必须先在对话中输出完整周报**，等用户确认或增删条目后才同步。
+> ⛔ **硬性约束 1：先展示，后同步**
+> 采集完成后**必须先在对话中输出完整周报**，等用户确认或增删条目后才写文档。
 > 用户常会要求移除若干条飞书文档（那些是顺手打开编辑的参考文档，不算本周产出）。
 > 未经确认直接写飞书或 OKR，会产出需要反复覆盖的脏数据。
+
+> ⛔ **硬性约束 2：每周只保留一份周报文档**
+> `output.one_doc_per_week=true`。写文档前**必须先查** `output.wiki_parent_node_token` 目录下
+> 是否已有本周文档：**有则 `overwrite` 更新，无则新建**，严禁同一周内产出第二份。
+> 用户多次让"汇总本周工作"时，后一次应覆盖前一次，而不是新开文档。
+
+> ⛔ **硬性约束 3：OKR 默认不写**
+> `okr.auto_sync=false`。汇总只生成飞书文档；只有用户明确说"同步 OKR / 写 OKR"时才执行第五步。
 
 ## 第一步（必做）：读取配置与确定周区间
 
@@ -133,37 +142,66 @@ rows = [l.split("|",3) for l in r.stdout.splitlines()
 海棠 batch 模式，本质都是幂等语义问题）和 LogBus 传输质量（延迟、丢失、卡住，
 3 张集中在同一组件）」——把分散工单归纳出共性根因。
 
-展示后主动问：是否要移除某些条目、是否同步到飞书文档与 OKR。
+展示后主动问：是否要移除某些条目、是否写文档（OKR 默认可不问，用户要求才同步）。
 
-## 第四步：同步飞书文档
+## 第四步：生成/更新周报文档（固定目录，每周一份）
+
+**位置固定**：`output.wiki_parent_node_token` 对应的 wiki 节点（`output.wiki_parent_title`，
+即「周总结」）下的子文档。**不要**建在文档库根目录或其它位置。
+
+### 4.1 先查本周是否已有文档（必做）
+
+```
+lark-cli wiki +node-list --space-id <output.wiki_space_id> --parent-node-token <output.wiki_parent_node_token> --as user --format json
+```
+
+返回 `data.items[]`，每项含 `title` / `node_token` / `obj_token`（**obj_token 才是文档 id**）。
+按标题匹配本周区间（`doc_title_template` 渲染结果，如「邓亚洲 本周工作汇总（2026-09-14 ~ 09-16）」；
+放宽为包含 start 日期即可）：
+- **命中** → 记下该节点 `obj_token`，走 4.3 覆盖更新；
+- **未命中** → 走 4.2 新建。
+
+### 4.2 新建节点（本周首次）
+
+```bash
+lark-cli wiki +node-create --parent-node-token <output.wiki_parent_node_token> \
+  --space-id <output.wiki_space_id> --obj-type docx \
+  --title "<渲染后的标题>" --as user --format json
+```
+
+返回的 `obj_token` 即文档 id（`node_token` 是 wiki 链接用的 token，两者不同）。
+
+### 4.3 写入正文（新建与更新都用同一套）
 
 **先写本地临时 md，再上传。** 不要把长 markdown 内联到 `--content`。
 
 ```bash
 cd <cwd> && cat > _weekly.md <<'MD'
+# <渲染后的标题>
+
 <周报正文>
 MD
-lark-cli docs +create --title "<doc_title_template>" --content @_weekly.md \
-  --doc-format markdown --as user --format json
+# 新建与更新都可直接用 overwrite（新文档为空，等价于写入）
+lark-cli docs +update --doc <obj_token> --command overwrite \
+  --content @_weekly.md --doc-format markdown --as user --format json
 ```
 
-已有文档要更新时用 `overwrite`：
-
-```bash
-lark-cli docs +update --doc <document_id> --command overwrite \
-  --content @_weekly.md --doc-format markdown --as user
-```
+> 正文首行 `# 标题` 会合成为文档 title，**不要在正文里重复写标题两遍**；
+> 文档标题实际以 4.2 的 `--title` 为准。
 
 ⚠️ **已知坑与对策**：
 - `@file` 只接受 **cwd 下的相对路径**，绝对路径会报 `unsafe file path`。
 - heredoc 与 `--content` 写在同一条命令里容易触发审批审核超时，**分两步执行**：先写文件，再单独跑 lark-cli。
 - 中文标题偶发触发审核超时。连续失败 2 次后，用 `output.ascii_title_fallback` 建文档，
   再 `docs +update --command str_replace` 把首行标题改回中文，并用 `docs +fetch` 验证。
-- 同步完成后删掉 `_weekly.md`。
-- 用户可能选择「仅同步飞书」或「先不同步」——**OKR 那一步是可选的**，按其指示执行；
-  若本次跳过 OKR 而用户后来又要求补，直接跑第五步即可（OKR 进展独立于周报文档）。
+- `node-create` 后需用返回的 `obj_token`（不是 `node_token`）去 fetch/update 文档。
+- 写完后用 `docs +fetch` 回读校验，并 `wiki +node-get` 确认父节点正确。
+- 同步完成后删掉 `_weekly.md`（不留本地临时文件）。
 
-## 第五步：同步 OKR 进展
+## 第五步：同步 OKR 进展（默认不执行）
+
+> ⛔ `okr.auto_sync=false`：**只有用户明确要求**（如「同步 OKR」「写 OKR」）才走这一步。
+> 若本次跳过、用户后来又要求补，直接跑本步即可（OKR 进展独立于周报文档）。
 
 ### 5.1 定位当季 KR
 
@@ -235,6 +273,9 @@ URL = "https://project.feishu.cn/mcp_server/v1"
 | 工单数量与上次不符 | 用户在周五下午补录了工单 | 每次重新 `ls`，不复用历史结论 |
 | `git log --author` 空结果 | 只匹配了一种署名 | 用 `"yazhou.TD\|邓亚洲"` |
 | `git log --since` 也空 | 时间过滤静默失效 | 去掉 `--since`，用 Python 按 `%ad` 字符串过滤 |
+| 同一周出现两份周报文档 | 写前没查重 | 先 `wiki +node-list` 查，有则 overwrite |
+| 文档建错位置 | 用了 `docs +create` 而非 wiki 建节点 | 走 `wiki +node-create --parent-node-token` |
+| 用 node_token 去 fetch 报错 | node_token ≠ 文档 obj_token | 用返回的 `obj_token` |
 | 审批审核超时 | 命令过长或含中文长标题 | 拆分命令、ASCII 标题兜底 |
 | OKR 写错 KR | 沿用了上季度 kr_id | 每季度首次执行先 `+cycle-detail` 核对 |
 | `+progress-list` 读不到 | 字段名记错 | 用 `.data.progress_list` |
