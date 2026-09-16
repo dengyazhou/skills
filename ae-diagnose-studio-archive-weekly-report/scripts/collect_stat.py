@@ -11,6 +11,14 @@
   --since  本周一 00:00（自动计算；窗口=本周一 → 服务器当前时刻，含当日最新）
   --key    ~/.ssh/dyz_inner.jumpserver.pem
 输出: 带 NOW 时间戳的各节制表符文本（--outfile 则同时落盘）。
+
+口径 —— 归档按 archives.source 分三类：
+  - web          网页端发起人工排查      → 计入统计
+  - mcp          [mcp]数小智 通道发起     → **也属用户真实使用，计入统计**（第 8 节给来源明细）
+  - scan-import  批量导入历史归档         → 单列（第九节），不计入统计
+    （归档目录扫描入库，created_at 是导入时刻而非原始排查时刻，内容为更早时间的历史问题）
+故统计口径 = 「排除 scan-import」（而非仅取 source='web'；早期 source 为空的记录也按此计入）。
+
 说明: 勿以历史快照/旧对话数字替代现场运行结果。
 """
 import argparse, base64, datetime, os, re, sys, time
@@ -39,35 +47,50 @@ def main() -> int:
     since = args.since  # YYYY-MM-DD
 
     WK = f"a.created_at >= '{since} 00:00:00'"
-    MCP = ("a.id NOT IN (SELECT a2.id FROM archives a2 JOIN tasks t "
-           "ON a2.dir_path LIKE t.archive_path || '%' "
-           f"WHERE a2.created_at >= '{since} 00:00:00' AND t.source='mcp')")
+    # MCP 来源（[mcp]数小智 通道）：属用户真实使用，计入统计；此子查询仅用于「来源明细」备注
+    MCPONLY = ("a.id IN (SELECT a2.id FROM archives a2 JOIN tasks t "
+               "ON a2.dir_path LIKE t.archive_path || '%' "
+               f"WHERE a2.created_at >= '{since} 00:00:00' AND t.source='mcp')")
+    # 批量导入历史归档（source='scan-import'）：created_at=导入时刻、内容为更早历史，不计入统计
+    EXCL_SCAN = "COALESCE(NULLIF(TRIM(a.source),''),'') <> 'scan-import'"
+    # 统计口径（含 web 与 mcp）＝ 排除 scan-import
+    HUMAN = f"{WK} AND {EXCL_SCAN}"
+    SCAN = f"{WK} AND COALESCE(NULLIF(TRIM(a.source),''),'') = 'scan-import'"
+    ST = "COALESCE(NULLIF(TRIM(a.outcome),''),'none')"
     CL = "CASE WHEN COALESCE(NULLIF(TRIM(a.cluster),''),'')='ID:' THEN 'Garena' " \
          "WHEN COALESCE(NULLIF(TRIM(a.cluster),''),'')='' THEN '(空)' ELSE a.cluster END"
 
     sqls = [
         ("0.总数", f"SELECT COUNT(*) total_all, SUM(created_at >= '{since} 00:00:00') week_cnt FROM archives"),
-        ("1.全量状态", "SELECT COALESCE(NULLIF(TRIM(outcome),''),'none') st, COUNT(*) n FROM archives WHERE "
-                       f"created_at >= '{since} 00:00:00' GROUP BY st"),
-        ("2.mcp自动化清单", "SELECT a.id, a.skill_id, a.created_at FROM archives a JOIN tasks t "
-                           f"ON a.dir_path LIKE t.archive_path || '%' WHERE {WK} AND t.source='mcp' ORDER BY a.created_at"),
-        ("3.人工skill×outcome", "SELECT a.skill_id, COALESCE(NULLIF(TRIM(a.outcome),''),'none') st, COUNT(*) n "
-                                f"FROM archives a WHERE {WK} AND {MCP} GROUP BY a.skill_id, st ORDER BY a.skill_id"),
-        ("4.人工每人×状态", "SELECT u.username, COALESCE(NULLIF(TRIM(a.outcome),''),'none') st, COUNT(*) n "
-                           f"FROM archives a JOIN users u ON u.id=a.owner_id WHERE {WK} AND {MCP} "
-                           "GROUP BY u.username, st ORDER BY u.username"),
-        ("5.人工unresolved(fix)", "SELECT u.username, a.skill_id, a.created_at, COALESCE(a.fix_status,'') fix, "
-                                  "COALESCE(a.fix_optimized_at,'') fixat, "
-                                  "substr(COALESCE(a.fix_note,''),1,30) note "
-                                  f"FROM archives a JOIN users u ON u.id=a.owner_id WHERE {WK} AND {MCP} "
-                                  "AND TRIM(a.outcome)='unresolved' ORDER BY a.skill_id, a.created_at"),
-        ("6.人工未标记清单", "SELECT u.username, a.created_at, a.skill_id, " +
-                            CL.replace("'(空)'", "'-'") + " cl, " +
-                            "substr(replace(replace(a.question, char(10),' '), char(13),' '),1,70) q "
-                            f"FROM archives a JOIN users u ON u.id=a.owner_id WHERE {WK} AND {MCP} "
-                            "AND COALESCE(NULLIF(TRIM(a.outcome),''),'none')='none' ORDER BY a.created_at"),
-        ("7.人工cluster分布", f"SELECT {CL} cl, COUNT(*) n FROM archives a WHERE {WK} AND {MCP} "
-                              "GROUP BY cl ORDER BY n DESC"),
+        ("1.本周来源分布", f"SELECT COALESCE(NULLIF(TRIM(source),''),'(空)') src, COUNT(*) n "
+                          f"FROM archives WHERE created_at >= '{since} 00:00:00' GROUP BY src ORDER BY n DESC"),
+        ("2.全量状态(含各类来源)", f"SELECT {ST} st, COUNT(*) n FROM archives a WHERE {WK} GROUP BY st"),
+        ("3.统计口径skill×outcome", f"SELECT a.skill_id, {ST} st, COUNT(*) n FROM archives a "
+                                   f"WHERE {HUMAN} GROUP BY a.skill_id, st ORDER BY a.skill_id"),
+        ("4.统计口径每人×状态", f"SELECT u.username, {ST} st, COUNT(*) n FROM archives a "
+                              f"JOIN users u ON u.id=a.owner_id WHERE {HUMAN} GROUP BY u.username, st ORDER BY u.username"),
+        ("5.统计口径unresolved(fix)", f"SELECT u.username, a.skill_id, a.created_at, "
+                                     "COALESCE(a.fix_status,'') fix, COALESCE(a.fix_optimized_at,'') fixat, "
+                                     "substr(COALESCE(a.fix_note,''),1,30) note "
+                                     f"FROM archives a JOIN users u ON u.id=a.owner_id WHERE {HUMAN} "
+                                     "AND TRIM(a.outcome)='unresolved' ORDER BY a.skill_id, a.created_at"),
+        ("6.统计口径未标记清单", f"SELECT u.username, a.created_at, "
+                               "COALESCE(NULLIF(TRIM(a.source),''),'(空)') src, a.skill_id, "
+                               + CL.replace("'(空)'", "'-'") + ", "
+                               "substr(replace(replace(a.question, char(10),' '), char(13),' '),1,70) q "
+                               f"FROM archives a JOIN users u ON u.id=a.owner_id WHERE {HUMAN} "
+                               f"AND {ST}='none' ORDER BY a.created_at"),
+        ("7.统计口径cluster分布", f"SELECT {CL} cl, COUNT(*) n FROM archives a WHERE {HUMAN} GROUP BY cl ORDER BY n DESC"),
+        ("8.MCP来源明细(已计入统计)", f"SELECT u.username, {ST} st, COUNT(*) n FROM archives a "
+                                    f"JOIN users u ON u.id=a.owner_id WHERE {HUMAN} AND {MCPONLY} "
+                                    "GROUP BY u.username, st ORDER BY u.username"),
+        ("8b.MCP来源时间范围", f"SELECT MIN(a.created_at), MAX(a.created_at), COUNT(*) FROM archives a WHERE {MCPONLY}"),
+        ("8c.web来源明细(已计入统计)", f"SELECT u.username, {ST} st, COUNT(*) n FROM archives a "
+                                     f"JOIN users u ON u.id=a.owner_id WHERE {HUMAN} AND NOT ({MCPONLY}) "
+                                     "GROUP BY u.username, st ORDER BY u.username"),
+        ("9.批量导入scan-import(单列,不计入)", f"SELECT a.skill_id, {ST} st, COUNT(*) n FROM archives a "
+                                             f"WHERE {SCAN} GROUP BY a.skill_id, st ORDER BY a.skill_id"),
+        ("9b.scan-import时间范围", f"SELECT MIN(a.created_at), MAX(a.created_at), COUNT(*) FROM archives a WHERE {SCAN}"),
     ]
 
     lines = []
