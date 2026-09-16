@@ -28,6 +28,9 @@ agent_created: true
 2. 计算本周区间：以当前日期所在周的**周一**为 start、**周五**为 end（跨周补录时以用户指定为准）。
 3. 记下周一零点的 Unix 时间戳，后续飞书文档过滤要用。
 
+⚠️ **周中执行**（周一~周四）：本周尚未结束，区间 end 取**执行当天**，汇总标题与正文须标注
+「截至周X」并在展示时提示用户"本周仍在进行，可周五补全后再同步"，避免把半周数据当整周。
+
 ## 第二步：并行采集四类数据源
 
 **必须并行发起**，四个源之间无依赖。逐个串行会让整个流程慢 3-4 倍。
@@ -48,6 +51,18 @@ done
 
 工单量通常 15-25 张，**按主题聚合**而非按时间罗列，同一组件/同一类语义问题归到一组
 （例如「数据重复与去重」「LogBus 与传输」「三方广告数据拉取」）。
+
+**同时取「工单类型_内容」**（问题排查 / 日常咨询 / 内部需求-问题修复），成文时按类型分组。
+一条 MQL 批量查（`work_item_id` 列表从建档时的返回值收集）：
+
+```
+mcp-tool:飞书项目MCP/search_by_mql
+  project_key: <feishu_project.project_key>
+  mql: SELECT `name`, `field_f91b3e` FROM `<project_key>`.`工单` WHERE `work_item_id` IN (...) LIMIT 30
+```
+
+返回值 `value.key_label_value.label` 即类型文案（如「问题排查」/「日常咨询」）。
+也可查本地 md——若文件内已写 `**【工单类型】**` 行则直接读，无需再查飞书。
 
 ### 2. 飞书文档更新（`sources.feishu_docs`）
 
@@ -73,8 +88,24 @@ git log --author="yazhou.TD\|邓亚洲" --since="<周一>" --until="<周五> 23:
 
 需要改动行数时加 `--stat`。多个仓库可在一条命令里用 `&&` 串起来，或并行发起。
 
+⚠️ **`--since`/`--until` 可能静默失效**（实测：`--author` 单独查询正常，叠加 `--since` 后返回空）。
+**对策**：先跑不带时间过滤的 `git log -80`，再用 Python 按日期字符串过滤（比 `--since` 稳，也便于统计）：
+
+```python
+import subprocess
+r = subprocess.run(["git","-C",repo,"log","-80","--format=%h|%ad|%an|%s","--date=short"],
+                   capture_output=True, text=True)
+rows = [l.split("|",3) for l in r.stdout.splitlines()
+        if len(l.split("|",3)) == 4 and l.split("|",3)[1] >= since]   # since='YYYY-MM-DD'
+```
+
 **归类原则**：`config.json` 里同 `category` 的仓库在周报中**合并为一个章节**，
 下面按仓库分子节。例如 diagnose-studio 与 skills 都属「AI 工具建设」。
+
+⚠️ **本地会话目录可作补充源**：非 `config.json` 登记的工具（如 qa-tool）若本周有实际使用/调试，
+可按需从 Reasonix 会话取证补入「AI 工具建设」——读 `~/.reasonix/projects/<项目路径转横线>/sessions/*.jsonl.meta`
+的 `topic_title`（会话标题）与 `preview`（首条提问）判断本周做了什么，再按主题归纳。
+**只读，勿改会话文件**（应用在跑，外部改动会被存成冲突副本）。
 
 ### 4. Codex 会话（`sources.codex_sessions`，默认关闭）
 
@@ -91,8 +122,11 @@ git log --author="yazhou.TD\|邓亚洲" --since="<周一>" --until="<周五> 23:
 |---|---|
 | 飞书文档更新 | 表格：更新时间 + 可点击标题链接，倒序 |
 | AI 工具建设 | 同 category 的仓库合并；表格：日期 + 内容（+ 改动行数） |
-| 工单记录 | 按主题聚合的三列表：主题 / 客户 / 问题，主题后标数量 |
+| 工单记录 | **按「工单类型_内容」分两组**：🔍 问题排查 / 💬 日常咨询（含内部需求时单列），组内按主题聚合三列表：主题 / 客户 / 问题 |
 | 本周主线 | 2-4 段散文。点出**趋势与关联**，不要复述上面的表格 |
+
+工单分组时给出各组数量（如「问题排查 12 张、日常咨询 8 张」），并在「本周主线」里点出
+**类型结构**说明了什么（例：问题排查占比高 = 本周以线上故障处理为主，非答疑）。
 
 「本周主线」是周报的价值所在。好的写法举例：
 「新增的 8 张让另外两条线浮出来了：数据重复与去重（尚娱 `#uuid`、拳游 `composit_key`、
@@ -126,6 +160,8 @@ lark-cli docs +update --doc <document_id> --command overwrite \
 - 中文标题偶发触发审核超时。连续失败 2 次后，用 `output.ascii_title_fallback` 建文档，
   再 `docs +update --command str_replace` 把首行标题改回中文，并用 `docs +fetch` 验证。
 - 同步完成后删掉 `_weekly.md`。
+- 用户可能选择「仅同步飞书」或「先不同步」——**OKR 那一步是可选的**，按其指示执行；
+  若本次跳过 OKR 而用户后来又要求补，直接跑第五步即可（OKR 进展独立于周报文档）。
 
 ## 第五步：同步 OKR 进展
 
@@ -140,6 +176,13 @@ lark-cli okr +cycle-detail --cycle-id <id> --as user --format json
 ```
 
 拿到新 id 后主动提示用户更新 `config.json`。
+
+**核实是否已同步**：`+progress-list` 的返回数组字段名是 `data.progress_list`（**不是** `progresses`），
+若最新一条的内容周次不是本周，说明上周漏写可在下次一并补。查：
+
+```bash
+lark-cli okr +progress-list --target-id <kr_id> --target-type key_result --as user --format json -q '.data.progress_list[0]'
+```
 
 ### 5.2 按映射写进展
 
@@ -166,6 +209,24 @@ lark-cli okr +progress-create --content @_okr_x.json --target-id <kr_id> \
 遇到时：去掉 `--source-title` 等可选参数、缩短单条 bullet 文本、改用最小命令重试。
 若连续多次失败，把生成好的 json 文件留在 cwd，把命令给用户手动执行，不要反复重试。
 
+## 附：飞书项目 MCP 不可用时的兜底
+
+宿主侧「飞书项目MCP」客户端偶发启动失败（报 `server/discover: failed to decode response: invalid request`），
+此时**服务端本身是正常的**，可直连 HTTP 端点继续建单/改字段：
+
+```python
+# initialize → notifications/initialized → tools/call（HTTPS 需跳过证书校验）
+URL = "https://project.feishu.cn/mcp_server/v1"
+# headers: {"Content-Type":"application/json",
+#           "Accept":"application/json, text/event-stream",
+#           "X-Mcp-Token":"<见 ~/.claude.json 的 mcpServers.飞书项目MCP.headers>"}
+# initialize 响应头 mcp-session-id 需带入后续 tools/call 的 Mcp-Session-Id
+```
+
+常用工具：`search_by_mql`（查工单/客户）、`create_workitem`、`update_field`（改「工单类型_内容」`field_f91b3e`）、
+`update_node`（排期+估分）、`get_node_detail`（回读校验排期/估分）。
+**排期校验**：`get_node_detail` 返回 `schedule.estimate_start_time/estimate_finish_time/points`。
+
 ## 常见坑
 
 | 现象 | 原因 | 对策 |
@@ -173,8 +234,12 @@ lark-cli okr +progress-create --content @_okr_x.json --target-id <kr_id> \
 | 飞书文档少了几份 | 提前 break，误以为按 update_time 排序 | 翻满 max_pages |
 | 工单数量与上次不符 | 用户在周五下午补录了工单 | 每次重新 `ls`，不复用历史结论 |
 | `git log --author` 空结果 | 只匹配了一种署名 | 用 `"yazhou.TD\|邓亚洲"` |
+| `git log --since` 也空 | 时间过滤静默失效 | 去掉 `--since`，用 Python 按 `%ad` 字符串过滤 |
 | 审批审核超时 | 命令过长或含中文长标题 | 拆分命令、ASCII 标题兜底 |
 | OKR 写错 KR | 沿用了上季度 kr_id | 每季度首次执行先 `+cycle-detail` 核对 |
+| `+progress-list` 读不到 | 字段名记错 | 用 `.data.progress_list` |
+| 飞书项目 MCP 启动失败 | 宿主客户端问题，非服务端 | 直连 `mcp_server/v1`（见「附」） |
+| 周中执行却写整周 | 区间取到周五 | end 取当天并标注「截至周X」 |
 
 ## 不在本 skill 范围
 
