@@ -1,0 +1,173 @@
+#!/usr/bin/expect -f
+
+# =============================================================================
+# JumpServer Connect — 自动化 SSH 经堡垒机登录目标主机（支持密钥 / 密码认证）
+#
+# 用法:
+#   connect.exp <auth> <secret> <jump_user> <jump_host> <jump_port> <search_term> [exact_host]
+#
+#   auth          = key | password
+#   secret        = 密钥路径(key) 或 密码(password)
+#   search_term   = 主机名/部分IP/备注（勿带节点分组前缀，如「连接 - 」）
+#   exact_host    = 可选；出现选择提示时作答：
+#                     [Host]> 多台主机 → 传精确主机名
+#                     ID>     单资产多账号 → 传账号 ID（缺省时自动选 readonly）
+#
+# 示例:
+#   # 账号密码登录（默认方式）
+#   connect.exp password 'pLZ...' shuxiaozhi jumpserver-inner-v4.thinkingdata.cn 2222 技术交付测试机
+#
+#   # 密钥登录（备选）
+#   connect.exp key ~/.ssh/dyz_inner.jumpserver.pem dengyazhou jumpserver-inner-v4.thinkingdata.cn 2222 技术交付测试机
+#
+#   # 单资产多账号：默认自动选 readonly；要 root 则显式传 ID
+#   connect.exp key ~/.ssh/dyz_customer.jumpserver.pem dengyazhou jumpserver-customer.thinkingdata.cn 2222 豹亮 2
+#
+# 退出码: 0 成功 | 1 参数错误/超时/认证失败 | 2 需指定主机名或账号ID | 3 搜索无结果
+# =============================================================================
+
+set timeout 60
+
+if {$argc < 6} {
+    puts "Usage: connect.exp <auth:key|password> <secret> <jump_user> <jump_host> <jump_port> <search_term> \[exact_host\]"
+    exit 1
+}
+
+set auth_mode   [lindex $argv 0]
+set secret      [lindex $argv 1]
+set jump_user   [lindex $argv 2]
+set jump_host   [lindex $argv 3]
+set jump_port   [lindex $argv 4]
+set search_term [lindex $argv 5]
+set exact_host  [lindex $argv 6]
+
+if {$auth_mode ne "key" && $auth_mode ne "password"} {
+    puts "ERROR: <auth> 必须是 key 或 password（收到：$auth_mode）"
+    exit 1
+}
+
+# ----- 回显当前登录身份（便于确认用的是哪个账号）-----
+puts ">>> 堡垒机 ${jump_host}:${jump_port}  |  账号 ${jump_user}  |  认证方式 $auth_mode"
+
+# ----- 连接堡垒机 -----
+if {$auth_mode eq "key"} {
+    spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+               -i $secret ${jump_user}@${jump_host} -p${jump_port}
+} else {
+    spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+               -o PubkeyAuthentication=no -o PreferredAuthentications=password \
+               -o NumberOfPasswordPrompts=1 \
+               ${jump_user}@${jump_host} -p${jump_port}
+}
+
+# ----- 密码认证：等 password 提示后送密码 -----
+if {$auth_mode eq "password"} {
+    expect {
+        -re "(?i)assword:" { send "$secret\r" }
+        -re "(?i)permission denied" {
+            puts "ERROR: 堡垒机拒绝认证（密码错误或无权限）"
+            exit 1
+        }
+        timeout {
+            puts "ERROR: 等待 password 提示超时"
+            exit 1
+        }
+    }
+}
+
+# ----- 等堡垒机菜单，发送搜索词 -----
+# 提示可能逐字符换行（慢连接/终端渲染），故用 \s* 放宽匹配
+expect {
+    -re {O\s*p\s*t\s*>} { send "$search_term\r" }
+    -re "(?i)permission denied" {
+        puts "ERROR: 堡垒机认证失败（密码错误或密钥无权限）"
+        exit 1
+    }
+    timeout {
+        puts "ERROR: 等待 JumpServer 菜单超时"
+        exit 1
+    }
+}
+
+# ----- 处理交互提示，最多 3 轮 -----
+# 两种提示均可能出现，且输出常逐字符换行，正则用 \s* 放宽：
+#   [Host]>  搜索命中多台主机，需选主机
+#   ID>      单个资产下有多个登录账号（如 readonly / root），需选账号
+# 两者都用第 7 个参数 exact_host 作答（主机名或账号 ID）。
+set connected 0
+for {set round 0} {$round < 3 && !$connected} {incr round} {
+    expect {
+        -re {\[\s*H\s*o\s*s\s*t\s*\]\s*>} {
+            if {$exact_host ne ""} {
+                send "$exact_host\r"
+            } else {
+                puts "\nERROR: 搜索词命中多台主机，请用第 7 个参数指定精确主机名"
+                puts "       （上方列表中的资产名即为可用的精确主机名）"
+                send "q\r"
+                expect eof
+                exit 2
+            }
+        }
+        -re {I\s*D\s*>} {
+            if {$exact_host ne ""} {
+                # 显式指定了账号 ID/名称：直接采用（如 "2" = root）
+                send "$exact_host\r"
+            } else {
+                # 默认优先 readonly 账号：从账号列表解析 readonly 对应的 ID
+                set buf $expect_out(buffer)
+                regsub -all "\033\\\[\[0-9;\]*\[a-zA-Z\]" $buf "" buf
+                set pick ""
+                if {[regexp -line {([0-9]+)[^|\r\n]*\|[^|\r\n]*\|\s*readonly\s*$} $buf -> id]} {
+                    set pick $id
+                } elseif {[regexp -line {([0-9]+)[^\r\n]*readonly} $buf -> id]} {
+                    set pick $id
+                }
+                if {$pick ne ""} {
+                    puts "\n>>> ID> 账号选择：默认优先 readonly（ID=$pick）"
+                    send "$pick\r"
+                } else {
+                    puts "\nERROR: 该资产有多个登录账号且未找到 readonly，请用第 7 个参数指定账号 ID"
+                    puts "       （上方列表给出各账号的 ID，如 1=readonly、2=root）"
+                    send "B\r"
+                    expect eof
+                    exit 2
+                }
+            }
+        }
+        -re {没有资产|没有搜索到|No assets} {
+            puts "\nERROR: 搜索无结果——请检查搜索词（资产名勿带节点分组前缀，如「连接 - 」）"
+            send "q\r"
+            expect eof
+            exit 3
+        }
+        -re {\[.*@.*\][#$]|\$ |# } {
+            set connected 1
+        }
+        timeout {
+            puts "ERROR: 等待搜索结果超时"
+            exit 1
+        }
+    }
+}
+
+if {!$connected} {
+    puts "WARNING: 已提交选择但未检测到 shell 提示符（网络慢、提示层级过多或 TTY 问题）"
+}
+
+if {$connected} {
+    puts "\n========================================="
+    puts "Connected to target host successfully."
+    puts "========================================="
+}
+
+# ----- 检测终端类型：交互式 → interact 保持会话；非 TTY → 退出 -----
+if {[catch {exec tty 2>/dev/null} tty_result]} {
+    # 非 TTY（Bash 工具调用）：只做连通性验证，发 exit 后立即退出。
+    # 注意：JumpServer 在 logout 后会回到 [Host]> 提示符而不关闭 SSH 连接，
+    # 若用 expect eof 会空等到 timeout（60s），使每次调用白等一分钟。
+    send "exit\r"
+    after 1200
+    exit 0
+} else {
+    interact
+}
