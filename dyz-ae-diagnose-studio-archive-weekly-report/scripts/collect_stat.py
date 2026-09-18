@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ae-diagnose-studio-archive-weekly-report: 经内部堡垒机收集 diagnose-studio 本周归档统计快照。
+"""dyz-ae-diagnose-studio-archive-weekly-report: 经内部堡垒机收集 diagnose-studio 本周归档统计快照。
 
 用法:
   python3 collect_stat.py [--search <主机搜索词>] [--db <远程 DB 路径>]

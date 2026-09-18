@@ -1,5 +1,5 @@
 ---
-name: ae-diagnose-studio-archive-weekly-report
+name: dyz-ae-diagnose-studio-archive-weekly-report
 description: 汇总 diagnose-studio（数据排查工作台 Web Studio）部署上的本周归档统计，生成「占比优先」样式的飞书云文档并同步。当用户需要查看 diagnose-studio / 数据排查工作台的历史归档统计（本周多少个会话、每人多少、已解决/未定位/未标记占比、按 skill/客户分布、未定位优化状态、批量导入单列），或要把该统计同步/刷新到飞书文档时使用。统计口径含网页端（web）与 MCP 通道（[mcp]数小智）发起的用户会话，仅排除批量导入的历史归档。也承接「重新拉一下数据同步飞书」「归档统计周报」「看下已解决/未定位占比」等说法。默认数据源：内部堡垒机 jumpserver-inner-v4 上 ta1（运维-技术交付测试机-腾讯云-刘路）的 /root/diagnose-studio/studio/studio.db。
 ---
 

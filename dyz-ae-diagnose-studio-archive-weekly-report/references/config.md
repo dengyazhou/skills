@@ -1,4 +1,4 @@
-# ae-diagnose-studio-archive-weekly-report 连接与目标配置
+# dyz-ae-diagnose-studio-archive-weekly-report 连接与目标配置
 
 ## 默认目标（可被调用参数覆盖）
 
