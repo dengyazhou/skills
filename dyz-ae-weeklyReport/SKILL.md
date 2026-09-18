@@ -1,5 +1,5 @@
 ---
-name: ae-weeklyReport
+name: dyz-ae-weeklyReport
 description: >
   汇总指定对象本周工作并生成飞书周报文档。从四类数据源采集：工单归档目录、
   飞书文档更新记录、git 仓库提交、Codex 会话（可选），归纳为
@@ -7,11 +7,11 @@ description: >
   先在对话中展示供用户增删条目，确认后在固定 wiki 目录下写入/更新本周周报文档
   （每周只保留一份）；OKR 进展默认不同步，仅当用户明确要求时按 KR 映射写入。
   数据源、输出目录、KR 映射由本 skill 目录下的 config.json 配置。
-  触发词：周报、本周工作、总结本周、工作汇总、weeklyReport、ae-weeklyReport、同步到OKR。
+  触发词：周报、本周工作、总结本周、工作汇总、weeklyReport、dyz-ae-weeklyReport、ae-weeklyReport、同步到OKR。
 agent_created: true
 ---
 
-# ae-weeklyReport
+# dyz-ae-weeklyReport
 
 把一周散落在多处的工作痕迹（工单、文档、代码提交）汇总成一份周报，
 写入飞书云文档；OKR 进展按需追加。
@@ -284,5 +284,5 @@ URL = "https://project.feishu.cn/mcp_server/v1"
 
 ## 不在本 skill 范围
 
-- 工单本身的归纳生成 → 用 `ae-ticketRecord`
+- 工单本身的归纳生成 → 用 `dyz-ae-ticketRecord`
 - OKR 撰写、双周复盘、对齐检查 → 用 `okr-agent`
