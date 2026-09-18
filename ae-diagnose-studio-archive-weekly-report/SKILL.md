@@ -15,7 +15,7 @@ description: 汇总 diagnose-studio（数据排查工作台 Web Studio）部署�
 
 ## 依赖
 
-- 连接：内部堡垒机（参考 `jumpserver-connect` 的 config；本技能 `scripts/collect_stat.py` 内置 paramiko 交互登录，key `~/.ssh/dyz_inner.jumpserver.pem`，主机搜索词可参数覆盖）。
+- 连接：内部堡垒机（参考 `dyz-ae-jumpserver-connect` 的 config；本技能 `scripts/collect_stat.py` 内置 paramiko 交互登录，key `~/.ssh/dyz_inner.jumpserver.pem`，主机搜索词可参数覆盖）。
 - 飞书：lark-cli user 身份。执行 `docs +update/+create` 前按 `lark-doc` skill 要求读取 `lark-doc-xml.md` / `lark-doc-style.md` / `lark-doc-update.md`；授权缺失时走 `lark-shared` 的 split-flow（`auth login --no-wait --json` 拿链接二维码 → 用户授权 → 亲自执行 `--device-code`，禁止缓存 device_code）。
 
 ## 工作流
@@ -42,8 +42,10 @@ python3 <skill_dir>/scripts/collect_stat.py [--search ...] [--db ...] [--since <
 - 按人表含 MCP 会话的 owner（如 liuchunwei）；如需要可加一行说明「其中 MCP 通道 N 条、网页端 M 条」；
 - 末尾单列一节：**批量导入历史归档（scan-import）**；不进按人/skill/占比统计，条数多时按「skill × 状态」汇总 + 时间范围呈现。
 
-### 第 4 步：同步飞书（默认新建周文档）
-- **默认动作：`lark-cli docs +create --content @archive_stat.xml --as user`**——为本周新建独立文档（`<title>` 作文档标题，标题内日期即统计周的周一）；创建成功后把新 URL 交给用户并登记到 references/config.md 的周文档清单。
+### 第 4 步：同步飞书（默认新建周文档，落在归档 wiki 目录下）
+- **默认动作：`lark-cli docs +create --parent-token EGqlwLYG9ihxnGkVd6UcuEphnob --content @archive_stat.xml --as user`**——为本周新建独立文档并直接挂在 wiki 节点《每周diagnose-studio归档统计》下（`<title>` 作文档标题，标题内日期即统计周的周一）；创建成功后把新 URL 交给用户并登记到 references/config.md 的周文档清单。
+  - 该 `--parent-token` 即 config.md「飞书目录（wiki 父节点）」的 node_token；**周文档必须建在此目录下**（用户明确要求）。
+  - 若文档已误建在云空间根目录，用 `lark-cli wiki +move --obj-type docx --obj-token <doc_token> --target-space-id 7314274064414457859 --target-parent-token EGqlwLYG9ihxnGkVd6UcuEphnob --as user` 迁入（docx token 与内容不变，返回新的 wiki node_token）。
 - 仅当用户显式要求更新某篇已有 docx（给出 token/链接，如“更新到 DUiR…这篇”）时才执行 `docs +update --doc <token> --command overwrite --content @archive_stat.xml --as user`；
 - 同一周内重复执行且用户要求原地刷新时，可覆盖该周自己的文档；**跨周一律新建，禁止覆盖其他周的文档**。
 

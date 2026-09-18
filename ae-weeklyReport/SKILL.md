@@ -155,10 +155,10 @@ rows = [l.split("|",3) for l in r.stdout.splitlines()
 lark-cli wiki +node-list --space-id <output.wiki_space_id> --parent-node-token <output.wiki_parent_node_token> --as user --format json
 ```
 
-返回 `data.items[]`，每项含 `title` / `node_token` / `obj_token`（**obj_token 才是文档 id**）。
-按标题匹配本周区间（`doc_title_template` 渲染结果，如「邓亚洲 本周工作汇总（2026-09-14 ~ 09-16）」；
+返回 `data.nodes[]`（**注意字段名是 `nodes` 不是 `items`**），每项含 `title` / `node_token` / `obj_token`（**obj_token 才是文档 id**）。
+按标题匹配本周区间（`doc_title_template` 渲染结果，如「邓亚洲 本周工作汇总（2026-09-14 ~ 09-17）」；
 放宽为包含 start 日期即可）：
-- **命中** → 记下该节点 `obj_token`，走 4.3 覆盖更新；
+- **命中** → 记下该节点 `obj_token`，走 4.3 覆盖更新（同时把正文首行标题改成新区间，即可一并更新文档 title）；
 - **未命中** → 走 4.2 新建。
 
 ### 4.2 新建节点（本周首次）

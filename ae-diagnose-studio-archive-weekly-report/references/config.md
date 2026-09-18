@@ -10,7 +10,8 @@
 | 归档库 DB | `/root/diagnose-studio/studio/studio.db` | ta1 上 diagnose-studio 部署的 SQLite 元数据库（archives/tasks/users） |
 | 统计起点 | **自动：本周一 00:00 → 服务器当前时刻**（周一起始日随执行日自动计算） | 每次执行固定拉取本周最新数据（含当日），无需传参；确需自定义窗口时才传 `--since YYYY-MM-DD` |
 | 飞书目标 | **每次执行为当前统计周新建独立文档**（标题《diagnose-studio 本周归档统计 YYYY-MM-DD》，YYYY-MM-DD=统计周周一） | 按周隔离，绝不覆盖历史周文档；仅用户显式给 token 时才原地覆盖 |
-| 历史周文档 | 2026-09-04 周：`DUiRdEqmWo1PhTx9F1BcRbBxnMc` | 2026-09-07 周：`GIHAdzwSYoFFjkxaomtctteknbc`；**2026-09-14 周：`Re1pdJdoUoUL8OxxrLxc2XsQnGh`**（每周执行后在此追加一行） |
+| **飞书目录（wiki 父节点）** | 节点《每周diagnose-studio归档统计》：node_token `EGqlwLYG9ihxnGkVd6UcuEphnob`，space_id `7314274064414457859` | **所有周文档必须建在这个 wiki 节点下**：`docs +create --parent-token EGqlwLYG9ihxnGkVd6UcuEphnob ...`；若先建在云空间再迁入，用 `wiki +move --obj-type docx --obj-token <doc> --target-space-id 7314274064414457859 --target-parent-token EGqlwLYG9ihxnGkVd6UcuEphnob` |
+| 历史周文档 | 均在同一 wiki 归档目录下：**2026-09-04 周** docx `DUiRdEqmWo1PhTx9F1BcRbBxnMc`（wiki node `IjbIwOvn6i1B0Ek57L5cFa7cnCe`） | **2026-09-07 周** docx `GIHAdzwSYoFFjkxaomtctteknbc`（wiki node `DSJmwuakGi46V0ktaHycE9uBnXd`）；**2026-09-14 周** docx `Re1pdJdoUoUL8OxxrLxc2XsQnGh`（wiki node `R4i6wKOv9iMWi7kgHatcbfvQnMc`）（每周执行后在此追加一行） |
 | 远程执行 | `python3`（ta1 自带；无 sqlite3 CLI 依赖） | 脚本用 base64 管道规避 shell 引号 |
 
 ## 口径开关（默认全开）

@@ -39,7 +39,8 @@
 - 表格单元格文本若含引号/特殊字符注意 XML 转义；mermaid 内容除 `&quot;` 外勿转义标签。
 
 ## 完成后（默认新建周文档，按周隔离）
-- **默认：`docs +create --content @<xml> --as user`** —— 每周执行都新建一篇独立文档（`<title>` 内日期=统计周周一），不覆盖历史周的文档；创建成功后把 URL 交给用户并登记。
+- **默认：`docs +create --parent-token EGqlwLYG9ihxnGkVd6UcuEphnob --content @<xml> --as user`** —— 每周执行都新建一篇独立文档并挂在 wiki 目录《每周diagnose-studio归档统计》下（`<title>` 内日期=统计周周一），不覆盖历史周的文档；创建成功后把 URL 交给用户并登记。
+  - 已误建在云空间时用 `wiki +move --obj-type docx --obj-token <doc> --target-space-id 7314274064414457859 --target-parent-token EGqlwLYG9ihxnGkVd6UcuEphnob` 迁入。
 - 仅当用户显式给 token 要求原地更新（如同周刷新）才用 `docs +update --doc <token> --command overwrite --content @<xml> --as user`。
 - 校验：`docs +fetch --doc <token>` 核对合计行/占比/是否优化 Y/未标记行数/`<whiteboard token>` 存在；
 - 清理 cwd 下临时 xml。
