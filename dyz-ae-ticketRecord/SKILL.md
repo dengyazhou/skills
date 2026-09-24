@@ -22,6 +22,15 @@ description: >
 > 只要 target 没有实质回答，**必须跳过，不得生成工单或同步到飞书项目**。
 > 被跳过的问题统一在"跳过报告"中列出，用户可自行手动补录。
 
+> ⚡ **自主执行原则（默认行为，无需反复确认）**
+> 本 skill **一次执行到底**，中途不向用户提确认性问题。具体地：
+> - **输入源**：能从用户消息或上下文判断就直接用，不要反问"你指的是哪个群/哪个文件"。
+> - **分类判断**（工单类型_内容 / 工单类型_TS / 估分 / 排期）：按本文件的规则**自主判定**，不询问。
+> - **推断性内容**：拿不准时按最合理的写法**自主完成**，在交付时用一句话标注（如"推断：xxx"）供事后核对，**不要中断流程**。
+> - **同步飞书项目**：`config.json` 中 `feishu_project.enabled = true` 即视为已授权，**直接执行创建与排期**，不询问是否同步。
+> - **例外**：仅当遇到**无法自行解决**的硬阻塞（如客户在飞书项目中确实搜不到、`config.json` 缺失或不可读）才向用户提问，且一次问清。
+> - 若 `config.json` 中 `review.enabled = true`，才需要"生成前展示待确认细节供审核"；当前为 `false`。
+
 ## 第一步(必做):读取配置
 
 每次执行**必须先**用 `Read` 工具读取本 skill 目录下的 `config.json`:
@@ -42,14 +51,13 @@ description: >
 读取配置后,在实际消息中匹配 target 时,留意消息里 target 实际出现的 `sender.id`（飞书 open_id）或 `senderOpenDingTalkId`（钉钉）。若与 `config.json` 中记录的 `target.open_id` 不一致：
 
 1. **不要静默忽略**——open_id 不一致可能意味着 config 配置已过期,或匹配到了同名其他人。
-2. 以姓名/aliases 匹配到的消息中实际出现的 ID 为准,主动提示用户："config 中 open_id 为 `xxx`,但消息中该用户实际 ID 为 `yyy`,是否更新 config？"
-3. 用户确认后,用 `Edit` 工具更新 `config.json` 中的 `target.open_id`。
+2. 以姓名/aliases 匹配到的消息中实际出现的 ID 为准,**直接用 `Edit` 工具更新 `config.json` 中的 `target.open_id`**,并在交付时告知用户："已将 config 中 open_id 由 `xxx` 更新为 `yyy`"。**不要为此中断流程询问**。
 
 此校验可避免因 open_id 过期导致 target 消息漏匹配。
 
 ## 输入源
 
-输入可以是以下任意一种,从用户消息中识别或向用户确认:
+输入可以是以下任意一种,**优先从用户消息或上下文自主识别**;仅当完全无法判断时才向用户确认:
 
 - **钉钉私聊/群聊**:用户指定"拉取钉钉和 XX 的消息"或"钉钉聊天记录"。先通过 `dws contact user search --keyword "姓名"` 获取目标用户的 `openDingTalkId`,再用 `dws chat message list-direct --open-dingtalk-id <id> --time "起始时间" --forward true --limit 100` 拉取私聊记录;群聊则用 `dws chat search --query "群名"` 找到 `openConversationId` 后,用 `dws chat message list --group <id>` 拉取。
 - **飞书文档**:文档标题或 URL(如 `https://thinkingdata.feishu.cn/wiki/xxxx`)
@@ -65,15 +73,25 @@ description: >
 2. 判断这些文档是否同属一件事:
    - **同一任务/同一问题链**(如多个群在推进同一个评估、同一个故障的不同现场)→ **合并为一条工单**;在【排查过程】各步骤后用括注标明来源(如"(内部群)""(与某某会话)"),还原跨群协作脉络。
    - **互不相关的独立问题** → **各自出独立工单**,分别按模板成文与存档。
-3. 拿不准是否相关时,先问用户要"合并成一条"还是"分开成多条"。
+3. 拿不准是否相关时,**自主判断**（同一任务/同一故障的不同现场→合并;互不相关的独立问题→各自出单）,并在交付时说明合并/拆分依据,不打断流程询问。
 4. **合并工单的命名**:`{title}` 取能概括整件事的名称(如"天梯夜幕之下项目LogBus容量评估"),而非其中某个单一群名。
 
 ## 读取方式
 
 - **钉钉私聊/群聊**:使用 `dws chat` 系列命令直接拉取 JSON 格式消息(无需手动解析文档)。命令返回的每条消息已包含 `sender`(发言人姓名)、`senderOpenDingTalkId`、`content`(文本内容,图片/文件为占位说明)、`createTime`(时间)。拉取后直接按 JSON 字段匹配 target,无需正则或 HTML 解析。
-- 飞书文档:若用户给了 URL 可直接传入 `mcp__feishu-mcp-dyz__fetch-doc`;若只给标题,先用 `mcp__feishu-mcp-dyz__search-doc` 搜到 `doc_id` 再 `fetch-doc`。
+  - **钉钉群消息拉取顺序**：`dws chat search --query "<群名>"` 取 `openConversationId` → `dws chat message list --group <openConversationId> --time "YYYY-MM-DD 00:00:00" --direction newer --limit 200`（`--direction newer` 从该时间往现在拉；返回为**倒序**，需自行按 `createTime` 正序整理）。
+  - **钉钉图片/文件可下载**（截图常含关键证据，建议在有价值时下载读取）：
+    ```bash
+    dws chat message download-media --type mediaId \
+      --resource-id '<mediaId，取 content 中 mediaId= 后的值，含开头的 $>' \
+      --message-id '<消息的 openMessageId>' \
+      --open-conversation-id '<openConversationId>' \
+      --output ./img.png
+    ```
+    ⚠️ 参数名**不是** `--media-id`；`--type mediaId`、`--resource-id`、`--message-id`、`--open-conversation-id` 四者均必填，缺一报 `unknown flag`/参数校验错。
+- 飞书文档:用 `lark-cli docs +fetch --doc "<URL 或 token>" --as user --format json` 读正文;若只给了标题,先 `lark-cli docs +search --query "<标题>" --as user --format json` 取到文档 URL/token,再 `+fetch`。
 - 本地纯文本文件(`.md`、`.txt`等):用 `Read` 工具读取。
-- 聊天记录中的图片(image token)通常是辅助截图,可不展开;如内容关键且用户要求,再用 `mcp__feishu-mcp-dyz__fetch-file` 取图分析。钉钉消息中的图片显示为 `[图片消息](mediaId=@xxx)`,文件显示为 `[文件] xxx`,内容不可直接读取,仅作为上下文参考。
+- 聊天记录中的图片通常是辅助截图,可不展开;如内容关键,按上述方式下载后读取分析。钉钉消息中的图片显示为 `[图片消息](mediaId=@xxx)`,文件显示为 `[文件] xxx`,附件名可读。
 
 ### docx 文件双路径提取
 
@@ -153,11 +171,41 @@ e. 验证: 输出总消息数，如明显偏少（如 < 10 条但文件体积较
 
 ## 同步到飞书项目
 
-当用户要求"同步到飞书项目"或 `config.json` 中 `feishu_project.enabled = true` 且用户未明确跳过同步时,执行以下流程。**同步前必须先完成本地文件的生成,以本地文件内容为准。**
+当 `config.json` 中 `feishu_project.enabled = true` 时,**默认执行以下流程**（无需用户要求、也无需再确认）；仅当用户明确表示跳过同步时才不执行。**同步前必须先完成本地文件的生成,以本地文件内容为准。**
 
 ### 前置条件
 
-需飞书项目 MCP 已连接（`mcp__FeishuProjectMcp__*` 系列工具可用），且拥有对目标空间的读写权限。
+需 **`meegle` CLI 已安装并处于登录态**（飞书项目官方 CLI，npm 包 `@lark-project/meegle`），且拥有对目标空间的读写权限。
+
+```bash
+meegle auth status   # authenticated 必须为 true；false 时先登录再同步
+```
+
+- **未安装**：`npx -y @lark-project/meegle@latest install --host project.feishu.cn --device-code --lang zh`
+- **未登录/已过期**：`meegle auth login --device-code`（输出授权 URL 后在浏览器完成授权）
+- access token 约 2 小时过期。
+
+> 🔧 **token 过期时的自主恢复（实测有效，无需打断用户）**
+> CLI 自身**不会**用 keychain 里的 refresh_token 自动续期，过期后直接报 `no local token`。可直连 OAuth 端点续期：
+> ```bash
+> # 从 keychain 取 refresh_token 与 client_id（macOS）
+> security find-generic-password -s meegle-cli -a default -w   # JSON: access_token/refresh_token/expires_at/client_id
+>
+> # 换取新 token（必须 form-urlencoded，JSON 方式会报 invalid_client）
+> curl -sS -k -X POST 'https://project.feishu.cn/mcp_server/oauth/token' \
+>   -H 'Content-Type: application/x-www-form-urlencoded' \
+>   --data-urlencode "grant_type=refresh_token" \
+>   --data-urlencode "refresh_token=<refresh_token>" \
+>   --data-urlencode "client_id=<client_id>"
+> # → {"access_token":"o-...","expires_in":7200,"refresh_token":"<不变>"}
+> ```
+> 拿到新 token 后用环境变量注入本次调用，**不改 keychain**：
+> ```bash
+> MEEGLE_USER_ACCESS_TOKEN="o-..." meegle workitem create ...
+> MEEGLE_USER_ACCESS_TOKEN="o-..." meegle auth status    # 应返回 authenticated: true
+> ```
+> ⚠️ **refresh_token 不会轮换**（多次刷新返回同值），故刷新**不会破坏用户登录态**。
+> ⚠️ 沙盒内**无法写回 keychain**（`Operation not permitted`），所以用户终端仍显示旧 token；如需其终端恢复，请用户在自己终端执行一次 `meegle auth status`。
 
 ### 工单类型_内容 自动分类
 
@@ -173,15 +221,47 @@ e. 验证: 输出总消息数，如明显偏少（如 < 10 条但文件体积较
 **判断优先级**(同一工单可能混合多类,按下述顺序判定,命中即止):
 
 1. **数数侧主动执行开发/修复/升级/内部变更落地** → `内部需求/问题修复`(判定锚点:【问题总结】中出现"数数已发布新版 SDK / 数数侧已修复 / 数数执行升级 / 内部跟进 / 研发处理"等**数数主动落地**动作)
-2. **否则,存在实际故障/异常并经排查定位根因**(由客户侧处理或仅解释原因)→ `问题排查`(判定锚点:【排查过程】有定位动作,【问题总结】为"定位根因,客户侧处理/解释原因")
-3. **否则,纯问答/咨询、无故障** → `日常咨询`(判定锚点:全程无排查、无修复,答完即闭环)
+2. **否则,按「对话形态」二分** —— 这是 `日常咨询` 与 `问题排查` 的**唯一主判据**:
+
+   | 形态 | 特征 | 归类 |
+   |---|---|---|
+   | **解释型** | 客户问"为什么 / 该怎么写 / 是否支持";数数侧**告知规则、用法、文档、正确配置**即可闭环;**无需进入环境、无需逐项排查** | `日常咨询` |
+   | **排查型** | 客户报"出故障了 / 数据不对";数数侧**进入环境实际排查**——登录服务器或后台、查日志/抓包、逐项比对、逐账户验证、多轮定位,最终**定位到具体故障点** | `问题排查` |
+
+   - **判定锚点(关键)**:看【排查过程】里数数侧**实际做了什么**,而**不是**看"根因最终归属谁"。
+     - 仅**告知/指引**(给文档、给写法、给规则、解释机制)→ **解释型 → `日常咨询`**
+     - **实际执行排查动作**(登录环境、看日志、命令行验证、逐项/逐账户核对、定位到具体对象)→ **排查型 → `问题排查`**
+   - ⛔ **不要用"根因归属客户侧"去否定问题排查**:根因落在客户侧配置/传参的工单,**既可能是日常咨询、也可能是问题排查**,取决于数数侧是"解释清楚"还是"排查定位"。这是最容易误判之处。
+   - 🔸 **补充情形——已确认缺陷/故障类**:若数数侧结论是"**确实存在问题**"(SDK/产品缺陷、环境异常、配置失效等,**不论责任归属**),**即使未做环境排查、只是直接告知修复版本**,仍归 **`问题排查`**。
+     - 典型:客户报崩溃,数数侧直接答"这是已知问题,升级到 X 版本即可修复"——虽属"告知动作",但确认了**缺陷存在**,归 `问题排查`(若数数侧还发布了修复版本,则升级为 `内部需求/问题修复`)。
+     - 与"客户用法问题"的区别:此类**没有"你应该这样用"的纠正**,而是**承认产品侧存在问题**。
+3. **否则**(无实质问答、仅信息同步类)→ 按语义最贴近的类别选择。
+
+> 📌 **回测锚点(判不准时对照这五例,均已被用户确认)**:
+>
+> | 工单 | 数数侧实际动作 | 正确归类 |
+> |---|---|---|
+> | 智品·神策转换数据查不到(客户漏传用户标识) | 核对字段后**告知入库规则** | 日常咨询 |
+> | 淦源·鸿蒙 eventData 未解析(客户传参未平铺) | 看日志后**告知正确写法** | 日常咨询 |
+> | 心流·三方方案并存致成本翻倍(客户配了两套方案) | **告知**用 `#thirdparty_entity_id` 区分 | 日常咨询 |
+> | 远略·鸿蒙埋点查不到(实为报表缓存) | **抓日志、查初始化 API、核对入库、比对分组** | 问题排查 |
+> | 岸边·Meta 拉取失败(方案含失效账户) | **ssh 登录、逐账户 curl 验证、逐项定位失效 ID** | 问题排查 |
+>
+> 共同规律:**「告知」→ 日常咨询;「排查定位」→ 问题排查**(与根因归属哪一侧无关)。
 
 **边界细化——"问题排查" vs "内部需求/问题修复"**:
 - 根因是**数数旧版 SDK/产品缺陷**,但修复动作**由客户侧升级应用执行、数数侧仅给出方案与文档指导、无内部开发/发布动作** → 归 **`问题排查`**(典型:指导客户升级 SDK 修复旧版缺陷)
 - 数数侧**有内部落地动作**(发布新版本、执行升级、修复代码、数据修复/回溯等)→ 归 **`内部需求/问题修复`**
 - 判断时看【问题总结】里修复动作的**执行方**:数数主动执行 → 内部需求/问题修复;客户执行、数数仅指导 → 问题排查
 
-判断时以工单【问题描述】【排查过程】【问题总结】三部分整体为依据,忠实原文,不臆测。若拿不准,在交付时把选定的类型列入"待确认细节"供用户复核。
+**边界细化——"日常咨询" vs "问题排查"(易错,务必按此判定)**:
+- ❌ **不要按"根因归属谁"判**（旧规则,已废弃）：根因落在客户侧配置/传参 → 一律归日常咨询，这个逻辑**是错的**，它把"经过实质排查才定位到"的工单错误降级了。
+- ✅ **按"数数侧做了告知还是排查"判**：
+  - 数数侧**只需告知**（给文档/写法/规则/机制解释）→ **`日常咨询`**
+  - 数数侧**必须进入环境排查才能定位**（登录、看日志、命令行验证、逐项核对）→ **`问题排查`**，**即使最终根因是客户侧的配置/传参问题**
+- 反例记忆：**远略**（根因是报表缓存）与**智品**（根因是客户漏传字段）都表现为"数据查不到"，但前者经过抓日志+核对入库+比对分组 → 问题排查；后者只需核对字段+告知规则 → 日常咨询。**区别在数数侧付出了哪种动作，不在根因归属。**
+
+判断时以工单【问题描述】【排查过程】【问题总结】三部分整体为依据,忠实原文,不臆测。若拿不准,自主选定最贴合的类型,并在交付时用一句话标注(如"推断：工单类型_内容选 X")供事后核对,**不中断流程**。
 
 ### 工单类型_TS 自动分类
 
@@ -208,7 +288,7 @@ e. 验证: 输出总消息数，如明显偏少（如 < 10 条但文件体积较
 **判断优先级**:
 
 1. 先定位问题**发生的环节**(客户端SDK / 服务端SDK / Restful API / LogBus / 三方集成 / 数据差异 / 分析产品 / 运营产品 / 组件异常 / 数据操作单项 / 技术方案 等),选择对应的叶子节点。
-2. 无法明确归入上述技术域时,选择语义最贴近的叶子;仍拿不准时列入"待确认细节"供用户复核。
+2. 无法明确归入上述技术域时,选择语义最贴近的叶子,并在交付时标注;不中断流程。
 3. 两个类型字段**独立判断、同时设置**:
    - 「工单类型_内容」= 处理**性质**(日常咨询 / 问题排查 / 内部需求/问题修复)
    - 「工单类型_TS」= 问题所属**技术环节**(如 SDK 缺陷需更新版本 → 内容=内部需求/问题修复、TS=数据集成>客户端SDK)
@@ -227,13 +307,17 @@ e. 验证: 输出总消息数，如明显偏少（如 < 10 条但文件体积较
 
 用 MQL 在飞书项目中搜索客户:
 
-```
-mcp__FeishuProjectMcp__search_by_mql
-  project_key: <feishu_project.project_key>
-  mql: SELECT `name`, `work_item_id` FROM `<project_key>`.`客户` WHERE `name` LIKE '%<客户名称>%' LIMIT 5
+```bash
+MQL="SELECT \`name\`, \`work_item_id\` FROM \`客户\` WHERE \`name\` LIKE '%<客户名称>%' LIMIT 5"
+meegle workitem query --project-key <feishu_project.project_key> --mql "$MQL"
 ```
 
-从结果中匹配客户名称,获取 `customer_work_item_id`。若搜索无结果或名称不匹配,询问用户确认客户名称或手动提供客户 ID。
+从返回的 `data."1"[*].moql_field_list` 里按 `key` 取值（`string_value` / `long_value`），匹配客户名称后获取 `customer_work_item_id`。
+
+> ⚠️ **MQL 字段名必须用项目真实字段名**——写错时 CLI 会直接给出候选（如 `创建人` → 建议 `创建者`、`工作项ID` → 建议 `work_item_id`），照提示改正后重试即可,不要臆造字段名。
+> ⚠️ **shell 转义**：MQL 用反引号包裹字段名、单引号包裹字符串,在 bash 双引号内需转义反引号（`` \` ``）,如上例;整条 MQL 也可改用 `--params` 传 JSON 规避转义。
+
+若搜索无结果或名称不匹配,**先自主放宽匹配**（试简称、去掉括号/地域后缀、换关键字再查一次）；确实搜不到时才向用户确认客户名称或请其提供客户 ID。
 
 #### 3. 组装工单名称
 
@@ -253,42 +337,44 @@ mcp__FeishuProjectMcp__search_by_mql
 
 #### 5. 创建工单
 
-```
-mcp__FeishuProjectMcp__create_workitem
-  project_key: <feishu_project.project_key>
-  work_item_type: <feishu_project.work_item_type>
-  fields:
-    - field_key: "name" → 组装后的工单名称
-    - field_key: <field_mapping.customer_id> → 客户 work_item_id
-    - field_key: <field_mapping.customer_name> → 客户名称文本
-    - field_key: <field_mapping.问题描述> → 【问题描述】内容
-    - field_key: <field_mapping.排查过程> → 【排查过程】内容
-    - field_key: <field_mapping.问题总结> → 【问题总结】内容
-    - field_key: <ticket_type.field_key> → 步骤 4 判断的工单类型_内容 option_id
-    - field_key: <ticket_type_ts.field_key> → 步骤 4 判断的工单类型_TS 叶子 option_id
-    - 合并 defaults.field_values 中的全部默认值
+```bash
+meegle workitem create --project-key <feishu_project.project_key> --work-item-type <feishu_project.work_item_type> --format json \
+  --fields '[{"field_key":"name","field_value":"<组装后的工单名称>"},{"field_key":"<field_mapping.customer_id>","field_value":"<客户 work_item_id>"},{"field_key":"<field_mapping.customer_name>","field_value":"<客户名称文本>"},{"field_key":"<field_mapping.问题描述>","field_value":"<【问题描述】内容>"},{"field_key":"<field_mapping.排查过程>","field_value":"<【排查过程】内容>"},{"field_key":"<field_mapping.问题总结>","field_value":"<【问题总结】内容>"},{"field_key":"<ticket_type.field_key>","field_value":"<步骤 4 判断的工单类型_内容 option_id>"},{"field_key":"<ticket_type_ts.field_key>","field_value":"<步骤 4 判断的工单类型_TS 叶子 option_id>"},{"field_key":"template","field_value":"214223"}]'
 ```
 
+`--fields` 传**一个 JSON 数组**，按 `config.json` 的 `field_mapping` 与 `defaults.field_values` 组装；`defaults.field_values` 的每个键值都要并入同一数组。创建成功后从返回中取 `work_item_id`，供后续 `workitem update` / `workflow update-node` 使用。
+
+> 🚨 **`field_value` STRING 协议（硬约束，实测）**：协议层 `field_value` 固定为字符串,**传数字会被服务端直接拒绝**（`argument ...field_value must be string, got number`）。
+> - 标量（number / bool / option_id / work_item_id / 毫秒时间戳）**一律加引号写成字符串**，如 `"214223"`、`"v64s_gkxw"`、`"7769675"`；
+> - 数组、对象**必须先 JSON.stringify** 再传（如 multi-user → `"[\"<userkey>\"]"`，直接传数组报 `need STRING type, but got: LIST`）；
+> - ⚠️ `config.json` 的 `defaults.field_values` 中 `template` 等键是**数字**，合并时必须转成字符串 `"214223"`。
+>
+> ⚠️ 三个正文字段是 `multi-text`，直接传 markdown 字符串即可；内容含换行 / 引号 / 反引号时按 JSON 规则转义。命令长、正文含特殊字符时，**建议用 python 拼好 `fields` 数组再 `subprocess.run(cmd)`**，避免 shell 转义踩坑。
+> ⚠️ 需批量创建多条工单时**必须串行执行**（逐条调用），禁止并发，否则会触发平台限流。
+
 > ⚠️ **已知兼容性处理（重要）**：当「工单类型_内容」判断为 `内部需求/问题修复`（`w6mxbmakg`）时，**直接与 `field_c69400`（工单类型_TS）一起创建会被飞书侧拒绝**（报"级联选项字段值层级无效"——该内容类型下 TS 字段的创建校验不通过）。
-> **处理方式**：先以「问题排查」（`v64s_gkxw`）+ 判断出的 TS 叶子创建工单，创建成功后再用 `update_field` 将 `field_f91b3e` 改为 `w6mxbmakg`。
+> **处理方式**：先以「问题排查」（`v64s_gkxw`）+ 判断出的 TS 叶子创建工单，创建成功后再改 `field_f91b3e`：
+>
+> ```bash
+> meegle workitem update --project-key <feishu_project.project_key> --work-item-id <创建返回的 work_item_id> \
+>   --fields '[{"field_key":"field_f91b3e","field_value":"w6mxbmakg"}]'
+> ```
+>
 > 其余两个内容类型（`ckj86uudm` 日常咨询 / `v64s_gkxw` 问题排查）可直接与 TS 一起创建，无需特殊处理。
 
 #### 6. 设置排期与估分
 
 创建成功后,用 `update_node` 设置默认排期和估分。**必须传 `clear_schedule: true`**,否则排期日期不会生效：
 
+```bash
+meegle workflow update-node --project-key <feishu_project.project_key> \
+  --work-item-id <创建返回的 work_item_id> \
+  --node-id <feishu_project.schedule_node_id> \
+  --node-schedule '{"clear_schedule":true,"points":0.1,"estimate_start_date":1789920000000,"estimate_end_date":1789920000000,"owners":["<当前用户 user_key>"]}'
 ```
-mcp__FeishuProjectMcp__update_node
-  project_key: <feishu_project.project_key>
-  work_item_id: <创建返回的 id>
-  node_id: <feishu_project.schedule_node_id>
-  node_schedule:
-    clear_schedule: true
-    points: <按「自动估分」规则计算的估分>
-    estimate_start_date: <对话发生日期 00:00:00 毫秒时间戳>
-    estimate_end_date: <对话发生日期 23:59:59 毫秒时间戳>
-    owners: ["<当前用户 open_id>"]
-```
+
+- **`owners` 填 user key**（形如 `7106308666671775745`），**不是 open_id**——用 `meegle user me` 取当前登录用户的 `user_key`（或 `meegle user search --user-keys current_login_user()`）。
+- ⚠️ `--node-schedule` 是**原生 JSON 参数**，与 `--fields` 的 STRING 协议**相反**：`points` 必须是**数字**（传 `"0.1"` 会报 `must be number, got string`），时间戳是数字，`owners` 是字符串数组。
 
 ### 自动估分
 
@@ -297,17 +383,35 @@ mcp__FeishuProjectMcp__update_node
 1. **基础分**由「工单类型_内容」决定：
    - 日常咨询 `ckj86uudm` → **0.1**
    - 问题排查 `v64s_gkxw` → **0.1**
-   - 内部需求/问题修复 `w6mxbmakg` → **0.5**
+   - 内部需求/问题修复 `w6mxbmakg` → **0.2**
 
-2. **复杂度调整**（每命中一项 +0.1，以【问题描述】【排查过程】【问题总结】为判定依据）：
-   - **跨天处理**：对话跨越 2 天及以上
-   - **多轮排查**：【排查过程】≥4 个步骤，或对话往返 ≥8 条消息
-   - **多群协作**：工单由多个群/文档合并
-   - **数数侧开发落地**：需数数侧更新 SDK / 修复 / 升级 / 内部变更（内部需求/问题修复类在此基础上另加）
+2. **加分项**（每命中一项 +0.1；以【问题描述】【排查过程】【问题总结】为判定依据）：
+   - **多轮深度排查**：仅对**排查型**工单适用——【排查过程】中有 **≥4 个实质排查步骤**，且包含**进入环境/逐项核对**类动作（登录服务器或后台、查日志/抓包、命令行验证、逐账户或逐项比对），最终经多轮往返才定位到具体故障点。
+     - ⚠️ **不算**的情形：仅"告知用法/给文档/解释规则"的**解释型**工单；仅对话条数多、但排查动作浅的工单。
+   - **数数侧开发落地**：数数侧更新 SDK / 修复代码 / 执行升级 / 内部变更（含发布新版本修复）。
 
-3. **取值约束**：0.1 步进，最小 0.1，最大 1.0；四舍五入到 0.1 的整数倍。
+3. ⛔ **不作为加分项**（这些**不等于**工作量大）：
+   - 跨天处理（对话跨越 2 天及以上）
+   - 多群协作（工单由多个群/文档合并）
+   - 单纯的消息条数多、对话轮次多
 
-4. **判定锚点**：以本地工单文件的四维度内容为依据，忠实原文，不臆测；拿不准时列入"待确认细节"供用户复核。
+4. **取值约束**：0.1 步进，最小 0.1，最大 1.0；四舍五入到 0.1 的整数倍。
+
+5. **判定锚点**：以本地工单文件的四维度内容为依据，忠实原文，不臆测；拿不准时按最贴近的档位自主定值，并在交付时标注。
+
+> 📌 **回测锚点（估分判不准时对照，均已被用户确认）**：
+>
+> | 工单 | 类型 | 命中加分 | 估分 |
+> |---|---|---|---|
+> | 智品·神策转换数据查不到 | 日常咨询 | 无 | 0.1 |
+> | 淦源·鸿蒙 eventData 未解析 | 日常咨询 | 无 | 0.1 |
+> | 心流·三方方案并存致成本翻倍 | 日常咨询 | 无 | 0.1 |
+> | 远略·鸿蒙埋点查不到 | 问题排查 | 多轮深度排查 | **0.2** |
+> | 岸边·Meta 拉取失败 | 问题排查 | 多轮深度排查 | **0.2** |
+> | 池骋·iOS 退出崩溃 | 问题排查 | 数数侧开发落地（发 3.5.2） | **0.2** |
+> | 掌声·PHP SDK track 失败 | 内部需求/问题修复 | 基础分 0.2 | **0.2** |
+>
+> 规律：**日常咨询一律 0.1；问题排查/内部需求 视是否命中加分项落在 0.1~0.3。**
 
 **排期日期取对话发生日期范围**（依据 `feishu_project.schedule_date`）：
 - 排期起始 = **对话开始日期** 00:00:00（与文件名 `{date}` 一致）
@@ -315,7 +419,7 @@ mcp__FeishuProjectMcp__update_node
 - **单日对话**：开始=结束=对话发生日期
 - **跨天对话**：排期覆盖 开始日 00:00:00 ~ 结束日 23:59:59 的完整时间范围
 - **不取执行当天**
-- 若无法确定对话日期，退回执行当天并列入"待确认细节"
+- 若无法确定对话日期，退回执行当天并在交付时标注
 
 时间戳计算方式（北京时间 CST, UTC+8），以跨天对话为例：
 ```python
@@ -329,7 +433,17 @@ end_ms = int(end.timestamp() * 1000)       # 结束日期结束
 
 #### 7. 验证同步结果
 
-用 `get_workitem_brief` 或 `search_by_mql` 回读确认工单名称、排期、估分、工单类型已正确写入。若字段内容与本地文件不一致,**以本地文件为准**用 `update_field` 修正。
+```bash
+meegle workitem get --project-key <feishu_project.project_key> --work-item-id <id> --fields _all
+meegle workflow get-node --project-key <feishu_project.project_key> --work-item-id <id> --node-id-list <feishu_project.schedule_node_id>
+```
+
+回读确认工单名称、工单类型（`field_f91b3e` / `field_c69400`）、四维正文、排期与估分是否已正确写入；
+`get-node` 返回的 `schedule` 里 `estimate_start_time` / `estimate_finish_time` / `points` 即实际排期与估分。
+若字段内容与本地文件不一致,**以本地文件为准**用 `meegle workitem update`（字段）/ `meegle workflow update-node`（排期）修正。
+
+> ⚠️ **已知坑：「总工时」(`field_23458b`) 可能未随排期汇总**（偶发，实测多次）
+> 设置排期后 `points` 已正确，但工单的「总工时」字段仍为 0 或空。**回读时务必一并核对总工时**；若未同步，**重跑一次同样的 `update-node` 命令**即可触发汇总（通常数秒后生效）。
 
 ### 关键规则
 
@@ -337,10 +451,10 @@ end_ms = int(end.timestamp() * 1000)       # 结束日期结束
 2. **客户名称以飞书项目为准**——群聊名称可能与飞书项目客户名称不一致,创建工单时取飞书项目中查到的正式客户名称。
 3. **`clear_schedule: true` 必传**——不传此参数排期日期不会写入节点。
 4. **总排期按对话发生日期范围**——`estimate_start_date` 取对话开始日期 00:00:00、`estimate_end_date` 取对话结束日期 23:59:59（跨天覆盖完整时间范围；单日开始=结束），不取执行当天。
-5. **同步失败不阻塞本地**——若飞书项目 MCP 不可用或创建失败,本地工单文件照常生成,提示用户手动同步。
+5. **同步失败不阻塞本地**——若 `meegle` 未安装 / 未登录或创建失败,本地工单文件照常生成,提示用户手动同步。
 6. **工单类型动态判断**——`ticket_type.field_key`(工单类型_内容)必须按「工单类型_内容 自动分类」规则三选一,**禁止固定为"问题排查"**。
 7. **工单类型_TS 动态判断**——`ticket_type_ts.field_key`(工单类型_TS)必须按「工单类型_TS 自动分类」规则选择叶子节点,**禁止固定为"数据集成/客户端SDK"**。
-8. **「内部需求/问题修复」创建兼容处理**——当「工单类型_内容」为 `w6mxbmakg` 时,先以 `v64s_gkxw` 创建工单,创建成功后再用 `update_field` 将 `field_f91b3e` 改为 `w6mxbmakg`(飞书侧创建校验拒绝 w6mxbmakg+TS 组合)。
+8. **「内部需求/问题修复」创建兼容处理**——当「工单类型_内容」为 `w6mxbmakg` 时,先以 `v64s_gkxw` 创建工单,创建成功后再用 `meegle workitem update` 将 `field_f91b3e` 改为 `w6mxbmakg`(飞书侧创建校验拒绝 w6mxbmakg+TS 组合)。
 
 ## 执行步骤
 
@@ -352,10 +466,10 @@ end_ms = int(end.timestamp() * 1000)       # 结束日期结束
    - **无回答**（target 被 @ 但未作答、或问题由其他同事全程处理）→ **标记为"跳过"**，不生成工单。
    - ⛔ **此规则为硬性约束**：即使用户明确要求"所有问题都出工单"、"这个问题也记录一下"、或声称"N 个问题就要 N 个工单"，只要 target 未参与回答，**必须拒绝生成**并解释原因。可建议用户："该问题由 XX 全程处理，如需记录建议切换总结对象或手动创建工单。"
    - 若所有问题均被跳过，告知用户"本期消息中未发现 target 参与回答的问题"，不生成任何工单文件，流程结束。
-5. **直接进入工单生成**：完成分析后直接进入工单生成流程，无需等待用户确认。若用户对跳过项有异议，重申硬性约束规则，**不可妥协**。
+5. **直接进入工单生成**：完成分析后直接进入工单生成流程并完成存档与同步，**全程不等待用户确认**。若用户对跳过项有异议，重申硬性约束规则，**不可妥协**。
 6. 多问题合并:提炼一个统一【问题标题】。
 7. 按四维度成文,遵守归纳规则(尤其:不出现 target 姓名、根因要点明)。
-8. 输出归纳结果;如用户要求落地存档,**先重新 `Read` 一次 `config.json` 取最新的 `output.dir`、`output.filename_template` 和 `output.weekly_dir_convention`(不要复用本轮早些时候缓存的值,配置可能已被改动)**,再按以下规则生成完整路径:
+8. 输出归纳结果;**默认直接落地存档**（用户说"记录工单"即视为要存档,不必再问）。**先重新 `Read` 一次 `config.json` 取最新的 `output.dir`、`output.filename_template` 和 `output.weekly_dir_convention`(不要复用本轮早些时候缓存的值,配置可能已被改动)**,再按以下规则生成完整路径:
 
    **路径生成规则**:
    1. 若 `output.weekly_dir_convention` 存在(非空),则在 `output.dir` 下插入一层周目录。周目录名称为**执行归档当天所属周的周一日期**(格式 YYYY-MM-DD)。⚠️ **以记录当天算,不是以对话/工单日期算**。例如:今天是 20260804(周二),则周目录为 `2026-08-03`,无论所归纳的对话发生在哪一天。
@@ -364,7 +478,7 @@ end_ms = int(end.timestamp() * 1000)       # 结束日期结束
    4. 若 `weekly_dir_convention` 不存在或为空,则路径 = `output.dir` / `filename_template 渲染结果`(无周目录层)。
    5. ⚠️ `output.dir` 下可能存在早期遗留的**周日**命名目录(如 `2026-06-22`、`2026-06-29`),**不代表现行规则**,不要参照它们反推口径。
    6. 若目录不存在则先 `mkdir -p` 创建完整路径。
-9. 若用户要求同步到飞书项目（或 `feishu_project.enabled` 且未跳过）,按「同步到飞书项目」章节执行,其中「工单类型_内容」「工单类型_TS」均按自动分类规则判断,不固定默认值。
+9. **默认直接同步**：除用户明确表示跳过、或 `feishu_project.enabled = false` 外,一律按「同步到飞书项目」章节执行（**不再询问是否同步**）,其中「工单类型_内容」「工单类型_TS」均按自动分类规则判断,不固定默认值。
 10. **输出跳过报告**：若步骤 4 中有问题被跳过（target 未参与回答），在所有工单生成完毕后，追加一段摘要告知用户哪些内容未生成工单：
 
 ```

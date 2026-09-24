@@ -412,7 +412,7 @@
       "basis": "chat_start_date"
     },
     "estimate_points": {
-      "note": "估分(points)不写死,按聊天内容自动评估,规则见 SKILL.md「自动估分」:基础分按工单类型_内容,复杂度/技术环节调整,0.1 步进,范围 0.1~1.0",
+      "note": "估分(points)不写死,按聊天内容自动评估,规则见 SKILL.md「自动估分」:基础分按工单类型_内容(日常咨询=0.1;问题排查=0.1;内部需求/问题修复=0.2);加分项每命中一项 +0.1——①多轮深度排查(仅排查型,【排查过程】≥4 个实质步骤且含进入环境/逐项核对动作) ②数数侧开发落地(发新版/修复/升级)。跨天、多群、消息条数多均不加分。0.1 步进,范围 0.1~1.0。回测:智品/淦源/心流=0.1;远略/岸边/池骋/掌声=0.2",
       "basis": "chat_content",
       "min": 0.1,
       "max": 1.0,
@@ -420,12 +420,12 @@
     }
   },
   "review": {
-    "enabled": true,
+    "enabled": false,
     "rules": [
       "不确定的细节不写：如果原文来自截图/图片且无法读取具体内容，只描述'指导修改配置'，不猜测具体配置项名称",
       "区分来源：文档链接中的 version 与实际 SDK 版本是两个概念，不混为一谈",
-      "生成前列出'待确认细节'：将推断性结论（如版本号归属、配置项名称、API名称等）单独列出，让用户确认后再写入"
+      "自主决定 + 交付时标注：拿不准的推断性结论（如根因机制、版本号归属、配置项名称），按最合理的写法自主完成，并在交付时用一句话标注（如'推断：xxx'）供用户事后核对；不要中断流程等待用户确认"
     ]
   },
-  "_comment": "target 指定要聚焦总结的对象(只提炼对该对象的提问及其回答);修改 name/open_id/aliases 即可切换对象。output.dir 为工单记录的存档目录,filename_template 支持占位符 {title}(项目/群名)与 {date}(YYYYMMDD)。feishu_project 为飞书项目同步配置,enabled=false 时不执行同步。ticket_type 为「工单类型_内容」(field_f91b3e,三选一);ticket_type_ts 为「工单类型_TS」(field_c69400,tree-select 单选叶子);两者均由 SKILL.md 中的自动分类规则动态判断,禁止固定默认值。review.enabled=true 时,生成工单前必须展示待确认细节供用户审核。 schedule_date 规定总排期日期按对话发生日期(开始日期)填写,而非执行当天。"
+  "_comment": "target 指定要聚焦总结的对象(只提炼对该对象的提问及其回答);修改 name/open_id/aliases 即可切换对象。output.dir 为工单记录的存档目录,filename_template 支持占位符 {title}(项目/群名)与 {date}(YYYYMMDD)。feishu_project 为飞书项目同步配置,enabled=false 时不执行同步。ticket_type 为「工单类型_内容」(field_f91b3e,三选一);ticket_type_ts 为「工单类型_TS」(field_c69400,tree-select 单选叶子);两者均由 SKILL.md 中的自动分类规则动态判断,禁止固定默认值。review 控制存疑内容的处理方式:rules 为归纳时必须遵守的准则;enabled=true 时才需在生成前展示待确认细节供用户审核,当前为 false(默认自主判断,不中断流程,推断性内容在交付时标注即可)。 schedule_date 规定总排期日期按对话发生日期(开始日期)填写,而非执行当天。"
 }
