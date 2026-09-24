@@ -27,7 +27,7 @@
      （mermaid 内双引号必须写成 `&quot;`，换行保留）
      **⚠️ 关键坑 1：`pie` 与 `title` 必须分行写**——写成一行 `pie title 会话状态占比（共A个）` 会被 lark 判为 `degrade_code=2107 Whiteboard content parse failed` 并丢弃整块画板（2026-09-24 实测：一行式 create 与 block_insert_after 补插均失败，分行后立即成功）。
      **⚠️ 关键坑 2：饼图不得出现值为 0 的扇区**（如 `&quot;未定位 0&quot; : 0`）——同样报 `degrade_code=2107` 并把整块降级丢弃（文档只剩表格、画板缺失）。故只列非零状态，0 值信息（如未定位 0）由下方占比表承载。
-     **⚠️ 关键坑 3：`docs +update --command overwrite` 丢画板是偶发、不可依赖**——2026-09-24 同日两次 overwrite 实测：第一次报 `degrade_code=2107`（`result=partial_success`）且文档里画板消失；第二次同一套 XML 正常保留画板、`warnings` 为空。故 **overwrite 之后一律 `docs +fetch` 检查 `<whiteboard` 是否存在，别只看 `ok=true` / `warnings`**（周内原地刷新是常态路径，缺失就按下条补插）。
+     **⚠️ 关键坑 3：`docs +update --command overwrite` 丢画板是高概率偶发，必须当常态防**——2026-09-24 同日 3 次 overwrite 实测：2 次报 `degrade_code=2107`（`result=partial_success`）且文档里画板消失；1 次同一套 XML 正常保留、`warnings` 为空。即**同一份内容时而成功时而失败，无法靠改写法规避**。故 **overwrite 之后一律 `docs +fetch` 检查 `<whiteboard` 是否存在（应为 1），别只看 `ok=true` / `warnings`**（周内原地刷新是常态路径，缺失就按下条补插；2026-09-24 已实测补插可用）。
      若 create/overwrite 已发生降级，可单独补插：先 `docs +fetch --detail with-ids` 取「二、」标题的 block_id，再 `docs +update --command block_insert_after --block-id <id> --content -`（stdin 传 mermaid；stdin 里双引号直接写 `"` 即可，已验证成功）。
    - 占比表：状态 | 会话数 | 占比（R/A、U/A、N/A，保留 1 位小数）。
    - 附注：结论标记率 (R+U)/A；可给「含批量导入+被排除 owner 口径」对照（把 scan-import S 与被排除 owner E 一并计入时总量与未标记率如何变化）。

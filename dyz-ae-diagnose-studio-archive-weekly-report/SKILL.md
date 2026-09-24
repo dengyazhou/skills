@@ -39,7 +39,7 @@ python3 <skill_dir>/scripts/collect_stat.py [--search ...] [--db ...] [--since <
 - 状态占比百分比 = 各类/统计总数（保留 1 位）；结论标记率 = (已解决+未定位)/统计总数；
 - skill「是否优化」列：`未定位 X · 已优化 Y`，Y 取 unresolved 中 fix_status=optimized 条数（**不是 resolved 数**）；具体措辞照抄 doc_template.md「四、」「七、」两条口径句；
 - **正文一律用业务语言，禁止出现数据库字段名/表名**（2026-09-24 用户反馈定稿）：`outcome`、`fix_status`、`optimized`、`resolved`、`source`、`created_at`、`owner`、`archives`/`tasks`/`users`、`scan-import` 等都不能写进文档——读者是业务/支持同学，不认字段名。对应换成：「未定位会话中已经在排查工作台标记『已优化』的条数」「批量导入的历史归档」「该账号」「网页端 35 + MCP 通道 1 + 来源未标注 2」等；字段名只留在 config.md / queries.md 等内部文件。定稿措辞与逐句模板见 doc_template.md「一、」「四、」「七、」「八、」；
-- mermaid 饼图用 `<whiteboard type="mermaid">`，引号写 `&quot;`；**`pie` 与 `title` 必须分行写**（写成一行 `pie title 会话状态占比（共A个）` 会报 `degrade_code=2107` 并丢弃整个画板，2026-09-24 实测）；**饼图禁写 0 值扇区**（如「未定位 0」）——否则同样 lark 报 `degrade_code=2107` 并丢弃整个画板，只列非零状态；**`overwrite` 丢画板属偶发、不可依赖**（2026-09-24 同日两次 overwrite：一次报 2107 且画板消失，一次正常保留）→ **无论 warnings 是否为空，每次 overwrite/create 后都要 fetch 校验 `<whiteboard` 是否存在，缺失则按 doc_template「二、」补插步骤用 `block_insert_after` 单独补**；
+- mermaid 饼图用 `<whiteboard type="mermaid">`，引号写 `&quot;`；**`pie` 与 `title` 必须分行写**（写成一行 `pie title 会话状态占比（共A个）` 会报 `degrade_code=2107` 并丢弃整个画板，2026-09-24 实测）；**饼图禁写 0 值扇区**（如「未定位 0」）——否则同样 lark 报 `degrade_code=2107` 并丢弃整个画板，只列非零状态；**`overwrite` 丢画板是高概率偶发，必须当作常态来防**（2026-09-24 同日 3 次 overwrite：2 次报 `degrade_code=2107` 且画板消失、1 次正常保留；同一份分行写法的 XML 时而成功时而失败，与内容无关）→ **无论 `ok`/`warnings` 如何，每次 overwrite/create 后都要 fetch 校验 `<whiteboard` 是否存在（`whiteboard count` 必须为 1），缺失就按 doc_template「二、」补插步骤用 `block_insert_after --content -`（stdin 传分行 mermaid）单独补**；
 - 按人表不含被排除的 owner（liuchunwei）与批量导入；可加一行说明来源构成（如「网页端 35 条 + MCP 通道 24 条」）；
 - 末尾单列一节：**批量导入历史归档（scan-import）**；不进按人/skill/占比统计，条数多时按「skill × 状态」汇总 + 时间范围呈现。
 
