@@ -37,20 +37,22 @@ python3 <skill_dir>/scripts/collect_stat.py [--search ...] [--db ...] [--since <
 ### 第 3 步：组装 XML（占比优先样式）
 按 `references/doc_template.md` 填入快照，产出 `<cwd>/archive_stat.xml`（用后清理）。要点：
 - 状态占比百分比 = 各类/统计总数（保留 1 位）；结论标记率 = (已解决+未定位)/统计总数；
-- skill「是否优化」列：`未定位 X · 已优化 Y`，Y 取 unresolved 中 fix_status=optimized 条数（**不是 resolved 数**）；
-- mermaid 饼图用 `<whiteboard type="mermaid">`，引号写 `&quot;`；**饼图禁写 0 值扇区**（如「未定位 0」）——否则 lark 报 `degrade_code=2107` 并丢弃整个画板，只列非零状态；
+- skill「是否优化」列：`未定位 X · 已优化 Y`，Y 取 unresolved 中 fix_status=optimized 条数（**不是 resolved 数**）；具体措辞照抄 doc_template.md「四、」「七、」两条口径句；
+- **正文一律用业务语言，禁止出现数据库字段名/表名**（2026-09-24 用户反馈定稿）：`outcome`、`fix_status`、`optimized`、`resolved`、`source`、`created_at`、`owner`、`archives`/`tasks`/`users`、`scan-import` 等都不能写进文档——读者是业务/支持同学，不认字段名。对应换成：「未定位会话中已经在排查工作台标记『已优化』的条数」「批量导入的历史归档」「该账号」「网页端 35 + MCP 通道 1 + 来源未标注 2」等；字段名只留在 config.md / queries.md 等内部文件。定稿措辞与逐句模板见 doc_template.md「一、」「四、」「七、」「八、」；
+- mermaid 饼图用 `<whiteboard type="mermaid">`，引号写 `&quot;`；**`pie` 与 `title` 必须分行写**（写成一行 `pie title 会话状态占比（共A个）` 会报 `degrade_code=2107` 并丢弃整个画板，2026-09-24 实测）；**饼图禁写 0 值扇区**（如「未定位 0」）——否则同样 lark 报 `degrade_code=2107` 并丢弃整个画板，只列非零状态；**`overwrite` 丢画板属偶发、不可依赖**（2026-09-24 同日两次 overwrite：一次报 2107 且画板消失，一次正常保留）→ **无论 warnings 是否为空，每次 overwrite/create 后都要 fetch 校验 `<whiteboard` 是否存在，缺失则按 doc_template「二、」补插步骤用 `block_insert_after` 单独补**；
 - 按人表不含被排除的 owner（liuchunwei）与批量导入；可加一行说明来源构成（如「网页端 35 条 + MCP 通道 24 条」）；
 - 末尾单列一节：**批量导入历史归档（scan-import）**；不进按人/skill/占比统计，条数多时按「skill × 状态」汇总 + 时间范围呈现。
 
 ### 第 4 步：同步飞书（默认新建周文档，落在归档 wiki 目录下）
-- **默认动作：`lark-cli docs +create --parent-token EGqlwLYG9ihxnGkVd6UcuEphnob --content @archive_stat.xml --as user`**——为本周新建独立文档并直接挂在 wiki 节点《每周diagnose-studio归档统计》下（`<title>` 作文档标题，标题内日期即统计周的周一）；创建成功后把新 URL 交给用户并登记到 references/config.md 的周文档清单。
-  - 该 `--parent-token` 即 config.md「飞书目录（wiki 父节点）」的 node_token；**周文档必须建在此目录下**（用户明确要求）。
-  - 若文档已误建在云空间根目录，用 `lark-cli wiki +move --obj-type docx --obj-token <doc_token> --target-space-id 7314274064414457859 --target-parent-token EGqlwLYG9ihxnGkVd6UcuEphnob --as user` 迁入（docx token 与内容不变，返回新的 wiki node_token）。
+- **默认动作：`lark-cli docs +create --parent-token ITPUwjPeIiW4oWkYGzocsi9CnVe --content @archive_stat.xml --as user`**——为本周新建独立文档并直接挂在 wiki 节点《每周diagnose-studio归档统计》下（`<title>` 作文档标题，标题内日期即统计周的周一）；创建成功后把新 URL 交给用户并登记到 references/config.md 的周文档清单。
+  - 该 `--parent-token` 即 config.md「飞书目录（wiki 父节点）」的 node_token；**周文档必须建在此目录下**（用户明确要求，2026-09-24 起该节点位于 wiki space《交付团队》`7620832102451285220`）。
+  - 若文档已误建在云空间根目录，用 `lark-cli wiki +move --obj-type docx --obj-token <doc_token> --target-space-id 7620832102451285220 --target-parent-token ITPUwjPeIiW4oWkYGzocsi9CnVe --as user` 迁入（docx token 与内容不变，返回新的 wiki node_token）。
+  - **迁移已有周文档/整体换目录**：用 node 模式跨 space 迁移，`lark-cli wiki +move --node-token <wiki_node_token> --target-space-id <目标 space> --target-parent-token <目标父节点> --as user`（可先加 `--dry-run` 预览）；**node_token 保持不变，旧 wiki 链接依旧有效**（2026-09-24 已用此法把 4 篇周文档整体迁入《交付团队》）；换目录后同步改 config.md 的父节点与 space_id。
 - 仅当用户显式要求更新某篇已有 docx（给出 token/链接，如“更新到 DUiR…这篇”）时才执行 `docs +update --doc <token> --command overwrite --content @archive_stat.xml --as user`；
 - 同一周内重复执行且用户要求原地刷新时，可覆盖该周自己的文档；**跨周一律新建，禁止覆盖其他周的文档**。
 
 ### 第 5 步：回读校验并清理
-`lark-cli docs +fetch --doc <token>` 核对：callout 数字、合计行（按人/skill）、占比表、是否优化 Y、未标记清单行数、`<whiteboard token=...>` 画板存在。**注意 create/update 返回里的 `warnings`：若出现 `degrade_code=2107`（画板解析失败）须按 doc_template 的「二、」补插步骤单独补画板**。删除临时 xml。校验不过则修正后重跑第 4 步。
+`lark-cli docs +fetch --doc <token>` 核对：callout 数字、合计行（按人/skill）、占比表、是否优化 Y、未标记清单行数、`<whiteboard token=...>` 画板存在。**注意 create/update 返回里的 `warnings`：若出现 `degrade_code=2107`（画板解析失败）须按 doc_template 的「二、」补插步骤单独补画板**。**另需扫一遍正文是否残留数据库字段名/表名**（`fix_status`、`outcome`、`created_at`、`owner`、`archives`、`scan-import` 等应全部为 0，见已知坑「正文勿露字段名」）。删除临时 xml。校验不过则修正后重跑第 4 步。
 
 ## 已知坑（务必避免）
 - **批量导入污染（务必排除）**：`archives.source='scan-import'` 是归档目录扫描入库的**历史归档**（`created_at` 为导入时刻而非原始排查时刻，会一次性灌入大量旧问题，如 2026-09-14 17:15:19 一次性 81 条、内容跨 2026-07~08）。不排除会把本周总量、人均工作量、未标记率全部打爆；必须排除并单列末节；
@@ -58,8 +60,10 @@ python3 <skill_dir>/scripts/collect_stat.py [--search ...] [--db ...] [--since <
 - **liuchunwei 默认排除（用户要求，长期生效）**：该 owner 的会话均为 MCP 通道测试/占位内容（`【原始问题】`/`__SKIP__`/`完全无关的问题 xyz`），不代表真实排查，故从统计口径排除；脚本 `--exclude-owner` 默认 `liuchunwei`，其会话在第 10 节单列便于核对；**文档只在「统计口径」注明一句「已排除 liuchunwei 的 N 条」，不列明细**；
 - **脏 cluster**：`ID:`（google_ads 归档）须归正 Garena；另见 `优化`/`使用`/`TE`/`App` 等由问题文本误提取的值，如实呈现并可在注中提示；
 - **数据随时在变**：会话新增、outcome/修复补标都实时发生，同一快照内数字必须相互自洽，汇报注明快照时间；
-- **outcome 与 fix 是两个维度**：「已解决/未定位/未标记」是 outcome；「是否优化」针对未定位会话的 fix_status=optimized，二者勿混；
+- **outcome 与 fix 是两个维度**：「已解决/未定位/未标记」是 outcome；「是否优化」针对未定位会话的 fix_status=optimized，二者勿混（**这是内部口径；写进文档要转成业务语言**）；
+- **正文勿露字段名/表名**（2026-09-24 用户反馈）：文档读者是业务/支持同学，`fix_status=optimized` 这类写法看不懂。正文一律说「其中已经在排查工作台标记『已优化』的条数」「批量导入的历史归档」「该账号」等；`outcome`/`created_at`/`owner`/`archives`/`scan-import` 同理不写。取数逻辑不变，只改措辞。定稿句见 doc_template.md「一、」「四、」「七、」「八、」；**注意用 `block_replace` 逐段改已发布文档时，每个 block 的 ID 都会变，别复用旧 ID**；
 - str_replace 对表格/多行不可靠，整篇刷新用 overwrite（此文档为纯统计内容，overwrite 安全）；
+- **`wiki +space-list` 不返回个人文档库 `my_library`**（CLI 提示：底层 API 从不返回个人库）：历史的周文档父节点曾建在个人库 `7314274064414457859`，虽在列表里查不到但 space 一直正常存在——**别因列表缺项就判定 space 被删**，要用 `wiki spaces get --params '{"space_id":"<id>"}'` 单查。现已整体迁到团队 space《交付团队》`7620832102451285220`，不会再遇到该情形；
 - 执行 SQL 的别名：FROM archives 未加别名时不要用 `a.` 前缀。
 
 ## References
