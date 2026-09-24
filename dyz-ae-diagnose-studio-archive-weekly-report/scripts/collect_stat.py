@@ -3,21 +3,24 @@
 
 用法:
   python3 collect_stat.py [--search <主机搜索词>] [--db <远程 DB 路径>]
-                          [--since YYYY-MM-DD] [--key <pem>] [--outfile <path>]
+                          [--since YYYY-MM-DD] [--key <pem>]
+                          [--exclude-owner liuchunwei] [--outfile <path>]
 
 默认值（每次执行自动拉取本周最新数据）:
   --search 运维-技术交付测试机-腾讯云-刘路
   --db     /root/diagnose-studio/studio/studio.db
   --since  本周一 00:00（自动计算；窗口=本周一 → 服务器当前时刻，含当日最新）
   --key    ~/.ssh/dyz_inner.jumpserver.pem
+  --exclude-owner 默认 liuchunwei（其会话为 MCP 通道测试/占位内容，不代表真实排查；逗号分隔可多个；传空串禁用）
 输出: 带 NOW 时间戳的各节制表符文本（--outfile 则同时落盘）。
 
-口径 —— 归档按 archives.source 分三类：
+口径 —— 归档按 archives.source 分三类，再按 owner 排除：
   - web          网页端发起人工排查      → 计入统计
   - mcp          [mcp]数小智 通道发起     → **也属用户真实使用，计入统计**（第 8 节给来源明细）
   - scan-import  批量导入历史归档         → 单列（第九节），不计入统计
     （归档目录扫描入库，created_at 是导入时刻而非原始排查时刻，内容为更早时间的历史问题）
-故统计口径 = 「排除 scan-import」（而非仅取 source='web'；早期 source 为空的记录也按此计入）。
+故统计口径 = 「排除 scan-import」且「排除 --exclude-owner 指定的 owner」（而非仅取 source='web'；
+早期 source 为空的记录也按此计入）。被排除的 owner 会话在第 10 节单列。
 
 说明: 勿以历史快照/旧对话数字替代现场运行结果。
 """
@@ -29,6 +32,8 @@ DEF_HOST, DEF_PORT, DEF_USER = "jumpserver-inner-v4.thinkingdata.cn", 2222, "den
 DEF_KEY = os.path.expanduser("~/.ssh/dyz_inner.jumpserver.pem")
 DEF_SEARCH = "运维-技术交付测试机-腾讯云-刘路"
 DEF_DB = "/root/diagnose-studio/studio/studio.db"
+# 默认从统计口径排除的 owner（其会话为 MCP 通道测试/占位内容，不代表真实排查）
+DEF_EXCLUDE_OWNER = "liuchunwei"
 
 
 def this_monday() -> str:
@@ -42,6 +47,8 @@ def main() -> int:
     ap.add_argument("--db", default=DEF_DB)
     ap.add_argument("--since", default=this_monday())
     ap.add_argument("--key", default=DEF_KEY)
+    ap.add_argument("--exclude-owner", default=DEF_EXCLUDE_OWNER,
+                    help="从统计口径中排除的 owner 用户名（逗号分隔；默认排除 liuchunwei；传空字符串禁用）")
     ap.add_argument("--outfile", default="")
     args = ap.parse_args()
     since = args.since  # YYYY-MM-DD
@@ -53,9 +60,19 @@ def main() -> int:
                f"WHERE a2.created_at >= '{since} 00:00:00' AND t.source='mcp')")
     # 批量导入历史归档（source='scan-import'）：created_at=导入时刻、内容为更早历史，不计入统计
     EXCL_SCAN = "COALESCE(NULLIF(TRIM(a.source),''),'') <> 'scan-import'"
-    # 统计口径（含 web 与 mcp）＝ 排除 scan-import
-    HUMAN = f"{WK} AND {EXCL_SCAN}"
+    # 排除的 owner（默认 liuchunwei：MCP 通道测试/占位内容）
+    _owners = [x.strip() for x in (args.exclude_owner or "").split(",") if x.strip()]
+    if _owners:
+        _in = ",".join("'" + o.replace("'", "''") + "'" for o in _owners)
+        EXCL_OWNER = f"a.owner_id NOT IN (SELECT id FROM users WHERE username IN ({_in}))"
+        ONLY_OWNER = f"a.owner_id IN (SELECT id FROM users WHERE username IN ({_in}))"
+    else:
+        EXCL_OWNER = "1=1"
+        ONLY_OWNER = "1=0"
+    # 统计口径（含 web 与 mcp；排除 scan-import 与被排除 owner）
+    STATS = f"{WK} AND {EXCL_SCAN} AND ({EXCL_OWNER})"
     SCAN = f"{WK} AND COALESCE(NULLIF(TRIM(a.source),''),'') = 'scan-import'"
+    OWNER_EXCL = f"{WK} AND {EXCL_SCAN} AND ({ONLY_OWNER})"
     ST = "COALESCE(NULLIF(TRIM(a.outcome),''),'none')"
     CL = "CASE WHEN COALESCE(NULLIF(TRIM(a.cluster),''),'')='ID:' THEN 'Garena' " \
          "WHEN COALESCE(NULLIF(TRIM(a.cluster),''),'')='' THEN '(空)' ELSE a.cluster END"
@@ -66,31 +83,36 @@ def main() -> int:
                           f"FROM archives WHERE created_at >= '{since} 00:00:00' GROUP BY src ORDER BY n DESC"),
         ("2.全量状态(含各类来源)", f"SELECT {ST} st, COUNT(*) n FROM archives a WHERE {WK} GROUP BY st"),
         ("3.统计口径skill×outcome", f"SELECT a.skill_id, {ST} st, COUNT(*) n FROM archives a "
-                                   f"WHERE {HUMAN} GROUP BY a.skill_id, st ORDER BY a.skill_id"),
+                                   f"WHERE {STATS} GROUP BY a.skill_id, st ORDER BY a.skill_id"),
         ("4.统计口径每人×状态", f"SELECT u.username, {ST} st, COUNT(*) n FROM archives a "
-                              f"JOIN users u ON u.id=a.owner_id WHERE {HUMAN} GROUP BY u.username, st ORDER BY u.username"),
+                              f"JOIN users u ON u.id=a.owner_id WHERE {STATS} GROUP BY u.username, st ORDER BY u.username"),
         ("5.统计口径unresolved(fix)", f"SELECT u.username, a.skill_id, a.created_at, "
                                      "COALESCE(a.fix_status,'') fix, COALESCE(a.fix_optimized_at,'') fixat, "
                                      "substr(COALESCE(a.fix_note,''),1,30) note "
-                                     f"FROM archives a JOIN users u ON u.id=a.owner_id WHERE {HUMAN} "
+                                     f"FROM archives a JOIN users u ON u.id=a.owner_id WHERE {STATS} "
                                      "AND TRIM(a.outcome)='unresolved' ORDER BY a.skill_id, a.created_at"),
         ("6.统计口径未标记清单", f"SELECT u.username, a.created_at, "
                                "COALESCE(NULLIF(TRIM(a.source),''),'(空)') src, a.skill_id, "
                                + CL.replace("'(空)'", "'-'") + ", "
                                "substr(replace(replace(a.question, char(10),' '), char(13),' '),1,70) q "
-                               f"FROM archives a JOIN users u ON u.id=a.owner_id WHERE {HUMAN} "
+                               f"FROM archives a JOIN users u ON u.id=a.owner_id WHERE {STATS} "
                                f"AND {ST}='none' ORDER BY a.created_at"),
-        ("7.统计口径cluster分布", f"SELECT {CL} cl, COUNT(*) n FROM archives a WHERE {HUMAN} GROUP BY cl ORDER BY n DESC"),
+        ("7.统计口径cluster分布", f"SELECT {CL} cl, COUNT(*) n FROM archives a WHERE {STATS} GROUP BY cl ORDER BY n DESC"),
         ("8.MCP来源明细(已计入统计)", f"SELECT u.username, {ST} st, COUNT(*) n FROM archives a "
-                                    f"JOIN users u ON u.id=a.owner_id WHERE {HUMAN} AND {MCPONLY} "
+                                    f"JOIN users u ON u.id=a.owner_id WHERE {STATS} AND {MCPONLY} "
                                     "GROUP BY u.username, st ORDER BY u.username"),
-        ("8b.MCP来源时间范围", f"SELECT MIN(a.created_at), MAX(a.created_at), COUNT(*) FROM archives a WHERE {MCPONLY}"),
+        ("8b.MCP来源时间范围", f"SELECT MIN(a.created_at), MAX(a.created_at), COUNT(*) FROM archives a "
+                              f"WHERE {STATS} AND {MCPONLY}"),
         ("8c.web来源明细(已计入统计)", f"SELECT u.username, {ST} st, COUNT(*) n FROM archives a "
-                                     f"JOIN users u ON u.id=a.owner_id WHERE {HUMAN} AND NOT ({MCPONLY}) "
+                                     f"JOIN users u ON u.id=a.owner_id WHERE {STATS} AND NOT ({MCPONLY}) "
                                      "GROUP BY u.username, st ORDER BY u.username"),
         ("9.批量导入scan-import(单列,不计入)", f"SELECT a.skill_id, {ST} st, COUNT(*) n FROM archives a "
                                              f"WHERE {SCAN} GROUP BY a.skill_id, st ORDER BY a.skill_id"),
         ("9b.scan-import时间范围", f"SELECT MIN(a.created_at), MAX(a.created_at), COUNT(*) FROM archives a WHERE {SCAN}"),
+        ("10.已排除owner(单列,不计入)=" + (args.exclude_owner or "(无)"),
+         f"SELECT u.username, {ST} st, COUNT(*) n FROM archives a JOIN users u ON u.id=a.owner_id "
+         f"WHERE {OWNER_EXCL} GROUP BY u.username, st ORDER BY u.username"),
+        ("10b.已排除owner时间范围", f"SELECT MIN(a.created_at), MAX(a.created_at), COUNT(*) FROM archives a WHERE {OWNER_EXCL}"),
     ]
 
     lines = []

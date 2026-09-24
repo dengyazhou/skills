@@ -7,9 +7,9 @@
 ## 章节骨架（编号按实际插入的「占比」章节顺延）
 
 1. **callout 概览**：`<callout emoji="📊" background-color="light-blue" border-color="blue">`
-   - 一句话：本周归档 X 个（历史累计 Y）：计入统计 A（网页端 W + MCP 通道 M）+ 批量导入 S（末节单列）。
+   - 一句话：本周归档 X 个（历史累计 Y）：计入统计 A（网页端 W + MCP 通道 M）+ 批量导入 S（末节单列）+ 已排除 liuchunwei E 条。
    - 状态百分比：已解决 r%（值 r）· 未定位 u%（值 u）· 未标记 n%（值 n）；未定位中已优化 k 条。
-2. **一、统计口径**：目标机/DB/时间窗/快照时间/口径说明（统计含 web 与 mcp，仅排除 scan-import；照抄 config.md 相关句）。
+2. **一、统计口径**：目标机/DB/时间窗/快照时间/口径说明（统计含 web 与 mcp；排除 scan-import 与 liuchunwei，并注明「已排除 liuchunwei 的 N 条」；照抄 config.md 相关句）。
 3. **二、会话状态占比（核心关注）**：
    - mermaid 饼图（新增即由 create/overwrite 创建 whiteboard block）：
      ```xml
@@ -21,9 +21,9 @@
      **⚠️ 关键坑：饼图不得出现值为 0 的扇区**（如 `&quot;未定位 0&quot; : 0`）——lark 会报 `degrade_code=2107 Whiteboard content parse failed` 并把整块降级丢弃（文档只剩表格、画板缺失）。故只列非零状态，0 值信息（如未定位 0）由下方占比表承载。
      若 create/overwrite 已发生降级，可单独补插：先 `docs +fetch --detail with-ids` 取「二、」标题的 block_id，再 `docs +update --command block_insert_after --block-id <id> --content -`（stdin 传 mermaid）。
    - 占比表：状态 | 会话数 | 占比（R/A、U/A、N/A，保留 1 位小数）。
-   - 附注：结论标记率 (R+U)/A；可给「含批量导入口径」对照（把 scan-import S 一并计入时总量与未标记率如何变化）。
-4. **三、按人统计**：列 = 用户 | 会话数 | 已解决 | 未定位 | 未标记 | **结论标记率**。含 MCP 会话的 owner（如 liuchunwei/zhangshengwen）。
-   - 表下可注明来源构成（如「MCP 通道 M 条、网页端 W 条」），批量导入不在表内（末节单列）。
+   - 附注：结论标记率 (R+U)/A；可给「含批量导入+被排除 owner 口径」对照（把 scan-import S 与被排除 owner E 一并计入时总量与未标记率如何变化）。
+4. **三、按人统计**：列 = 用户 | 会话数 | 已解决 | 未定位 | 未标记 | **结论标记率**。不含被排除 owner（liuchunwei）与批量导入。
+   - 表下可注明来源构成（如「网页端 W 条 + MCP 通道 M 条」）；批量导入与被排除 owner 均不在表内。
 5. **四、按 skill 分布**：列 = skill | 会话数 | 已解决 | 未定位 | 未标记 | **已解决率** | **是否优化**。
    - 「是否优化」单元格：`未定位 X · 已优化 Y`；X/Y 口径见 config.md，**Y 不是 resolved 数**。
    - 表下注明两个口径（是否优化 / 已解决率）。
