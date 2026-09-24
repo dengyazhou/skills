@@ -64,13 +64,16 @@ done
 **同时取「工单类型_内容」**（问题排查 / 日常咨询 / 内部需求-问题修复），成文时按类型分组。
 一条 MQL 批量查（`work_item_id` 列表从建档时的返回值收集）：
 
-```
-mcp-tool:飞书项目MCP/search_by_mql
-  project_key: <feishu_project.project_key>
-  mql: SELECT `name`, `field_f91b3e` FROM `<project_key>`.`工单` WHERE `work_item_id` IN (...) LIMIT 30
+```bash
+MQL="SELECT \`name\`, \`field_f91b3e\` FROM \`客户成功\`.\`工单\` WHERE \`work_item_id\` IN (...) LIMIT 30"
+meegle workitem query --project-key <project_key> --mql "$MQL"
 ```
 
-返回值 `value.key_label_value.label` 即类型文案（如「问题排查」/「日常咨询」）。
+- `project_key` 与工单 skill 共用同一空间，取自 `dyz-ae-ticketRecord/config.json` 的 `feishu_project.project_key`（本 skill 的 config 未单独维护该值）。
+- 需 **`meegle` CLI 已安装并登录**（先 `meegle auth status`，详见 `dyz-ae-ticketRecord/SKILL.md`「前置条件」）。
+- MQL 用反引号包字段名、单引号包字符串，在 bash 双引号内需转义反引号（`` \` ``）。
+
+返回值取 `data."1"[*].moql_field_list[*].value.key_label_value.label` 即类型文案（如「问题排查」/「日常咨询」）。
 也可查本地 md——若文件内已写 `**【工单类型】**` 行则直接读，无需再查飞书。
 
 ### 2. 飞书文档更新（`sources.feishu_docs`）
@@ -247,23 +250,31 @@ lark-cli okr +progress-create --content @_okr_x.json --target-id <kr_id> \
 遇到时：去掉 `--source-title` 等可选参数、缩短单条 bullet 文本、改用最小命令重试。
 若连续多次失败，把生成好的 json 文件留在 cwd，把命令给用户手动执行，不要反复重试。
 
-## 附：飞书项目 MCP 不可用时的兜底
+## 附：飞书项目数据通道（meegle CLI）
 
-宿主侧「飞书项目MCP」客户端偶发启动失败（报 `server/discover: failed to decode response: invalid request`），
-此时**服务端本身是正常的**，可直连 HTTP 端点继续建单/改字段：
+飞书项目相关的查询与写入统一走 **`meegle` CLI**（飞书项目官方 CLI，npm 包 `@lark-project/meegle`），不依赖 MCP。
 
-```python
-# initialize → notifications/initialized → tools/call（HTTPS 需跳过证书校验）
-URL = "https://project.feishu.cn/mcp_server/v1"
-# headers: {"Content-Type":"application/json",
-#           "Accept":"application/json, text/event-stream",
-#           "X-Mcp-Token":"<见 ~/.claude.json 的 mcpServers.飞书项目MCP.headers>"}
-# initialize 响应头 mcp-session-id 需带入后续 tools/call 的 Mcp-Session-Id
+```bash
+meegle auth status    # authenticated 必须为 true；false 时 meegle auth login --device-code
 ```
 
-常用工具：`search_by_mql`（查工单/客户）、`create_workitem`、`update_field`（改「工单类型_内容」`field_f91b3e`）、
-`update_node`（排期+估分）、`get_node_detail`（回读校验排期/估分）。
-**排期校验**：`get_node_detail` 返回 `schedule.estimate_start_time/estimate_finish_time/points`。
+| 用途 | 命令 |
+|---|---|
+| MQL 查工单/客户 | `meegle workitem query --project-key <pk> --mql "<MQL>"` |
+| 回读字段 | `meegle workitem get --project-key <pk> --work-item-id <id> --fields _all` |
+| 建单 / 改字段 | `meegle workitem create` / `meegle workitem update` |
+| 排期 + 估分 | `meegle workflow update-node --node-schedule '{...clear_schedule...}'` |
+| 回读排期/估分 | `meegle workflow get-node --node-id-list <state_id>` |
+| 按视图拉工作项 | `meegle view get --view-id <id> --project-key <pk>` |
+| 解析飞书项目链接 | `meegle url decode --url <URL>`（得 `view_id` / `work_item_id` 等结构化字段） |
+
+**排期校验**：`workflow get-node` 返回的 `schedule.estimate_start_time` / `estimate_finish_time` / `points` 即实际排期与估分。
+
+**两条写入约定（方向相反，勿混用）**：
+- `--fields` 的 `field_value` 是**字符串协议**——数字也要加引号（`"214223"`），数组/对象需 JSON.stringify；
+- `workflow update-node` 的 `--node-schedule` 是**原生 JSON**——`points` 必须是数字（传 `"0.1"` 报 `must be number, got string`）。
+
+各命令的完整用法与字段分类规则见 `dyz-ae-ticketRecord/SKILL.md`「同步到飞书项目」章节。
 
 ## 常见坑
 
@@ -279,7 +290,8 @@ URL = "https://project.feishu.cn/mcp_server/v1"
 | 审批审核超时 | 命令过长或含中文长标题 | 拆分命令、ASCII 标题兜底 |
 | OKR 写错 KR | 沿用了上季度 kr_id | 每季度首次执行先 `+cycle-detail` 核对 |
 | `+progress-list` 读不到 | 字段名记错 | 用 `.data.progress_list` |
-| 飞书项目 MCP 启动失败 | 宿主客户端问题，非服务端 | 直连 `mcp_server/v1`（见「附」） |
+| `meegle` 报未登录 / 认证失败 | access token 约 2h 过期 | `meegle auth login --device-code`（refresh_token 通常自动续期，正常无需手登） |
+| `field_value` 传数字被拒 | 协议层固定字符串 | 数字也加引号，如 `"214223"` |
 | 周中执行却写整周 | 区间取到周五 | end 取当天并标注「截至周X」 |
 
 ## 不在本 skill 范围
