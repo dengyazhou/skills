@@ -271,8 +271,15 @@ lark-cli okr +progress-create \
   --target-type key_result \
   --progress-status <normal|overdue|done> \
   --progress-percent <0-100> \
+  --style richtext \
   --content '<进展内容 ContentBlock JSON>'
 ```
+
+> 🚨 **`--style richtext` 必传（实测踩坑）**
+> `--style` 默认值为 `simple`（半纯文本 JSON），而上面用的是 **ContentBlock JSON**。
+> 不传该参数会直接报错 `--content text is required and cannot be empty`——看着像"内容为空"，实为风格不匹配，极易误判为内容格式问题。
+> `lark-cli okr +progress-create --help` 中标注：`--style` 取值 `simple | richtext`，默认 `simple`。
+> 若只想写纯文本，也可改用 simple 风格：`--content '{"text":"..."}'`（此时无需 `--style`）。
 
 ---
 

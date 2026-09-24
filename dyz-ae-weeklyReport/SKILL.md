@@ -238,15 +238,20 @@ json.dump({'blocks':[para('...'), b('...'), link]}, open('_okr_x.json','w'), ens
 ```
 
 ```bash
-lark-cli okr +progress-create --content @_okr_x.json --target-id <kr_id> \
+lark-cli okr +progress-create --content @_okr_x.json --style richtext --target-id <kr_id> \
   --target-type key_result --as user --format json -q '.data.progress.progress_id'
 ```
 
 **每条进展末尾都追加周报文档的 docsLink**，这样 OKR 界面能直接跳转细节。
 三条可并行提交。完成后删掉临时 json 并回报 progress_id。
 
+> 🚨 **`--style richtext` 必传（实测踩坑）**
+> `--style` 默认值为 `simple`（半纯文本 JSON），而本 skill 用的是 **ContentBlock JSON**。
+> 不传该参数会直接报错 `--content text is required and cannot be empty`——看着像"内容为空"，实为风格不匹配，极易误判。
+> `lark-cli okr +progress-create --help` 中标注：`--style` 取值 `simple | richtext`，默认 `simple`。
+
 ⚠️ `+progress-update` 没有 `--source-url`，链接只能以 docsLink 形式写在内容里。
-⚠️ 审批审核器对 `+progress-create` 偶发 JSON 解析报错（`expected , or }`）。
+⚠️ 审批审核器对 `+progress-create` 偶发 JSON 解析报错（`expected , or }`）——**先确认命令带上了 `--style richtext`**，再按下面处理。
 遇到时：去掉 `--source-title` 等可选参数、缩短单条 bullet 文本、改用最小命令重试。
 若连续多次失败，把生成好的 json 文件留在 cwd，把命令给用户手动执行，不要反复重试。
 
@@ -290,7 +295,8 @@ meegle auth status    # authenticated 必须为 true；false 时 meegle auth log
 | 审批审核超时 | 命令过长或含中文长标题 | 拆分命令、ASCII 标题兜底 |
 | OKR 写错 KR | 沿用了上季度 kr_id | 每季度首次执行先 `+cycle-detail` 核对 |
 | `+progress-list` 读不到 | 字段名记错 | 用 `.data.progress_list` |
-| `meegle` 报未登录 / 认证失败 | access token 约 2h 过期 | `meegle auth login --device-code`（refresh_token 通常自动续期，正常无需手登） |
+| `+progress-create` 报 `--content text is required and cannot be empty` | `--style` 默认 `simple`，与 ContentBlock JSON 不匹配 | 命令加 `--style richtext` |
+| `meegle` 报未登录 / 认证失败 | access token 约 2h 过期 | 直连 OAuth 刷新（见 `dyz-ae-ticketRecord/SKILL.md`「token 过期时的自主恢复」）；或 `meegle auth login --device-code` |
 | `field_value` 传数字被拒 | 协议层固定字符串 | 数字也加引号，如 `"214223"` |
 | 周中执行却写整周 | 区间取到周五 | end 取当天并标注「截至周X」 |
 
