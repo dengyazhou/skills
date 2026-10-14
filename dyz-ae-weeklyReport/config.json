@@ -26,13 +26,13 @@
           "path": "/Users/thinkingdata-yazhou/Desktop/dyz_claude_ai/ta_sourcecode/tech-support/diagnose-studio",
           "label": "diagnose-studio",
           "category": "AI 工具建设",
-          "note": "排查子 Agent，对应 O1 KR2"
+          "note": "排查子 Agent，对应 O1 KR4（迭代优化工作台能力与体验 ≥ 30 项）"
         },
         {
           "path": "/Users/thinkingdata-yazhou/Desktop/dyz_claude_ai/project/skills",
           "label": "skills",
           "category": "AI 工具建设",
-          "note": "工单归纳/周报 skill，对应 O2 KR2.1"
+          "note": "工单归纳/周报 skill；Q4 无直接对应 KR，属内部提效工具"
         }
       ],
       "_comment": "git log --author 用 'yazhou.TD\\|邓亚洲' 同时匹配两种署名。注意 --since/--until 可能静默失效，见 SKILL.md"
@@ -41,11 +41,25 @@
       "enabled": false,
       "dir": "/Users/thinkingdata-yazhou/.codex/sessions",
       "_comment": "默认关闭。Codex 会话噪声大（大量 reviewer session），且用户通常不需要。需要时置 true"
+    },
+    "im_chat": {
+      "enabled": true,
+      "chats": [
+        {
+          "chat_id": "oc_222a70c3f45e90e5cbde13f7ffc6b3d3",
+          "name": "数小智讨论",
+          "gap_minutes": 90,
+          "note": "对应 O2 KR2「常态化使用数小智辅助答疑，主动反馈答案质量」的证据台账"
+        }
+      ],
+      "count_mode": "defect_item",
+      "collector": "references/collect_im_chat.py",
+      "_comment": "只采集 target.open_id 本人的发言（锚点）及其话题闭环结论（他人回应）。gap_minutes 为话题切分阈值：相邻真人消息间隔超过该值即切新话题，避免把几天后的无关讨论吸进来；回应本人的消息强制纳入。count_mode=defect_item 表示按「一条具体缺陷/建议」计数（用户 2026-10-14 确认口径），而非按消息条数或话题数。机器人（sender_type=app）消息一律剔除，其日报只可作背景参考、不计入个人产出。"
     }
   },
   "output": {
     "doc_title_template": "{target} 本周工作汇总 {start}~{end}",
-    "sections": ["飞书文档更新", "AI 工具建设", "工单记录", "本周主线"],
+    "sections": ["飞书文档更新", "AI 工具建设", "工单记录", "数小智反馈与闭环", "本周主线"],
     "ascii_title_fallback": "weekly-{start_short}-{end_short}",
     "wiki_parent_node_token": "Ur7vw9dhsicOTvkNqHjcQYr3nyf",
     "wiki_space_id": "7314274064414457859",
@@ -56,24 +70,41 @@
   "okr": {
     "enabled": true,
     "auto_sync": false,
+    "cycle_id": "7684002341171481798",
+    "cycle_range": "2026-10-01 ~ 2026-12-31",
     "cycle_hint": "当前季度周期，用 +cycle-list 按 start_time/end_time 包含今天筛选",
     "kr_mapping": [
       {
-        "kr_id": "7659330176421514223",
-        "kr_name": "持续沉淀技术支持文档，丰富智能客服知识库",
+        "kr_id": "7694862264691690711",
+        "kr_name": "持续沉淀技术支持知识文档 ≥ 20 篇，覆盖三方数据集成、客户端 SDK、数据链路等高频场景（飞书知识库文档形态）",
+        "objective": "O2 构建技术支持知识沉淀闭环，反哺智能客服与排查能力",
         "feeds_from": ["feishu_docs"]
       },
       {
-        "kr_id": "7659330220026629103",
-        "kr_name": "开发上线问题排查子Agent",
-        "feeds_from": ["git_repos.diagnose-studio"]
+        "kr_id": "7694862115543436586",
+        "kr_name": "常态化使用数小智辅助答疑，主动反馈答案质量 ≥ 30 次；提炼改进建议并推动落地，其中 ≥ 5 项被采纳",
+        "objective": "O2 构建技术支持知识沉淀闭环，反哺智能客服与排查能力",
+        "feeds_from": ["im_chat"]
       },
       {
-        "kr_id": "7659330176422530031",
-        "kr_name": "覆盖团队内部办公全面 AI 化，实现工单、周报、TQA 报告等事务自动化提效",
-        "feeds_from": ["tickets", "git_repos.skills"]
+        "kr_id": "7694862837345520910",
+        "kr_name": "沉淀客户端高频问题排查案例与剧本 ≥ 20 个，覆盖 19 个平台典型问题类型",
+        "objective": "O1 主导问题排查工作台（diagnose-studio）与客户端排查能力建设",
+        "feeds_from": ["feishu_docs", "tickets"]
+      },
+      {
+        "kr_id": "7694862964112985303",
+        "kr_name": "推动问题排查 Agent 在真实客户支持中常态化使用，每周受托客户端排查任务 ≥ 10 个",
+        "objective": "O1 主导问题排查工作台（diagnose-studio）与客户端排查能力建设",
+        "feeds_from": ["tickets", "git_repos.diagnose-studio"]
+      },
+      {
+        "kr_id": "7694872135391268041",
+        "kr_name": "持续迭代优化 diagnose-studio 的能力与体验：提炼并落地改进项 ≥ 30 项",
+        "objective": "O1 主导问题排查工作台（diagnose-studio）与客户端排查能力建设",
+        "feeds_from": ["git_repos.diagnose-studio"]
       }
     ],
-    "_comment": "auto_sync=false 表示汇总后默认只生成飞书文档、不自动写 OKR；仅当用户明确要求「同步 OKR」时才执行第五步。kr_id 每季度换周期后会变，需用 +cycle-detail 重新获取并更新此处"
+    "_comment": "auto_sync=false 表示汇总后默认只生成飞书文档、不自动写 OKR；仅当用户明确要求「同步 OKR」时才执行第五步。kr_id 每季度换周期后会变：2026-10-14 已按 Q4 周期(7684002341171481798)刷新，O2 KR2 由 im_chat 喂养，与周报「数小智反馈与闭环」章节一一对应。"
   }
 }
