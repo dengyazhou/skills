@@ -26,9 +26,9 @@
      ```
      （mermaid 内双引号必须写成 `&quot;`，换行保留）
      **⚠️ 关键坑 1：`pie` 与 `title` 必须分行写**——写成一行 `pie title 会话状态占比（共A个）` 会被 lark 判为 `degrade_code=2107 Whiteboard content parse failed` 并丢弃整块画板（2026-09-24 实测：一行式 create 与 block_insert_after 补插均失败，分行后立即成功）。
-     **⚠️ 关键坑 2：饼图不得出现值为 0 的扇区**（如 `&quot;未定位 0&quot; : 0`）——同样报 `degrade_code=2107` 并把整块降级丢弃（文档只剩表格、画板缺失）。故只列非零状态，0 值信息（如未定位 0）由下方占比表承载。
-     **⚠️ 关键坑 3：`docs +update --command overwrite` 丢画板是高概率偶发，必须当常态防**——2026-09-24 同日 3 次 overwrite 实测：2 次报 `degrade_code=2107`（`result=partial_success`）且文档里画板消失；1 次同一套 XML 正常保留、`warnings` 为空。即**同一份内容时而成功时而失败，无法靠改写法规避**。故 **overwrite 之后一律 `docs +fetch` 检查 `<whiteboard` 是否存在（应为 1），别只看 `ok=true` / `warnings`**（周内原地刷新是常态路径，缺失就按下条补插；2026-09-24 已实测补插可用）。
-     若 create/overwrite 已发生降级，可单独补插：先 `docs +fetch --detail with-ids` 取「二、」标题的 block_id，再 `docs +update --command block_insert_after --block-id <id> --content -`（stdin 传 mermaid；stdin 里双引号直接写 `"` 即可，已验证成功）。
+     **⚠️ 关键坑 2：饼图不得出现值为 0 的扇区**（如 `&quot;未定位 0&quot; : 0`）——同样报 `degrade_code=2107` 并把整块降级丢弃（文档只剩表格、画板缺失）。故只列非零状态，0 值信息（如未定位 0）由下方占比表承载。**2026-10-10 实测：24 条里未定位为 0，饼图只写「已解决 15」「未标记 9」两个扇区完全正常**；缺扇区不影响下方占比表（表里仍照常列「未定位 0 / 0.0%」），并在附注里说明一句「饼图按平台要求只画非零扇区」更稳妥。
+     **⚠️ 关键坑 3：`degrade_code=2107`（画板解析失败）是服务端随机偶发，不是内容错误——首选「原样重试」**。2026-09-24 / 2026-10-10 累计实测：同一份分行写法 XML，`create` 时而报 2107 丢画板、时而正常；`overwrite` 3 次里 2 次丢；**连补插用的 `block_insert_after` 也会偶发失败**（2026-10-10：同一条命令第一次 `result=failed` + 附带 `1003 empty content`，原样第二次即 `success`）。**所以遇到 2107 不要改内容、不要改写法，直接重跑同一条命令**；连续重试仍失败才回到关键坑 1/2 自查内容。
+     固定处置：**① 每次 create/overwrite 后一律 `docs +fetch` 检查 `<whiteboard` 是否存在（应为 1），别只看 `ok=true` / `warnings`**（报 2107 时画板必丢）；**② 缺失就补插**：`docs +fetch --detail with-ids` 取「二、」标题的 block_id，再 `docs +update --command block_insert_after --block-id <id> --content -`（stdin 传分行 mermaid，双引号直接写 `"`）；**③ 补插报 2107 就原样重跑，通常第二次即成功**。
    - 占比表：状态 | 会话数 | 占比（R/A、U/A、N/A，保留 1 位小数）。
    - 附注：结论标记率 (R+U)/A；可给「含批量导入+被排除 owner 口径」对照（把 scan-import S 与被排除 owner E 一并计入时总量与未标记率如何变化）。
 4. **三、按人统计**：列 = 用户 | 会话数 | 已解决 | 未定位 | 未标记 | **结论标记率**。不含被排除 owner（liuchunwei）与批量导入。

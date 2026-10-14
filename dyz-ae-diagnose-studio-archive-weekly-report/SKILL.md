@@ -22,6 +22,9 @@ description: 汇总 diagnose-studio（数据排查工作台 Web Studio）部署�
 
 ### 第 1 步：确认目标与落点（周窗口不用问）
 - **周窗口固定规则：每次执行统计窗口 = 本周一 00:00 → 服务器当前时刻（自动计算，含当日最新数据），无需询问日期**；仅当用户显式给出起止日期时才覆盖。
+- **⚠️ 不得自动沿用往次执行留下的「临时起止日期」**：用户若在某次执行中指定过 `--since`（如「起点改 2026-09-20」），那只是**针对那一次/那一篇文档**的临时覆盖，不是长期设定。**跨周（或距上次执行数日以上）再次执行时，必须重新判断**：① 先看脚本/远端返回的当前日期，与上次执行日期比对，若已跨周就别沿用旧起点；② 窗口起点直接决定整篇数字（2026-10-10 实测：09-20 起 63 条 vs 本周一起 10 条，差 6 倍），且旧起点会让「本周报」变成跨多周累计——**这种情况必须用 `ask` 让用户选窗口与落点，不要替用户决定**。
+- **执行前先确认「现在」**：脚本输出的 `NOW` / `# window:` 行是远端真实时间，据此判断统计周与新文档标题日期，不要用对话上下文里的旧日期。
+
 - 统计目标环境/归档库（默认 ta1 的 studio.db，可换内部其他主机）；
 - **飞书落点（按周隔离，硬规则）：每次执行为当前统计周新建一篇独立飞书文档（标题带周日期，如《diagnose-studio 本周归档统计 2026-09-14》），绝不覆盖历史周的文档**；仅当用户显式给出某篇 docx token/链接要求原地更新时才覆盖该篇。
 - 口径开关默认开启：**统计口径 = 排除 `archives.source='scan-import'` + 排除 `liuchunwei`（其会话为 MCP 通道测试/占位内容，不代表真实排查）**——`web` 与 `mcp` 来源**均计入统计**（MCP 通道发起的也是用户真实会话）；批量导入单列末节、liuchunwei 只在口径注明一句，均不进统计；`cluster` 脏值 `ID:` 归正 Garena。
@@ -39,7 +42,11 @@ python3 <skill_dir>/scripts/collect_stat.py [--search ...] [--db ...] [--since <
 - 状态占比百分比 = 各类/统计总数（保留 1 位）；结论标记率 = (已解决+未定位)/统计总数；
 - skill「是否优化」列：`未定位 X · 已优化 Y`，Y 取 unresolved 中 fix_status=optimized 条数（**不是 resolved 数**）；具体措辞照抄 doc_template.md「四、」「七、」两条口径句；
 - **正文一律用业务语言，禁止出现数据库字段名/表名**（2026-09-24 用户反馈定稿）：`outcome`、`fix_status`、`optimized`、`resolved`、`source`、`created_at`、`owner`、`archives`/`tasks`/`users`、`scan-import` 等都不能写进文档——读者是业务/支持同学，不认字段名。对应换成：「未定位会话中已经在排查工作台标记『已优化』的条数」「批量导入的历史归档」「该账号」「网页端 35 + MCP 通道 1 + 来源未标注 2」等；字段名只留在 config.md / queries.md 等内部文件。定稿措辞与逐句模板见 doc_template.md「一、」「四、」「七、」「八、」；
-- mermaid 饼图用 `<whiteboard type="mermaid">`，引号写 `&quot;`；**`pie` 与 `title` 必须分行写**（写成一行 `pie title 会话状态占比（共A个）` 会报 `degrade_code=2107` 并丢弃整个画板，2026-09-24 实测）；**饼图禁写 0 值扇区**（如「未定位 0」）——否则同样 lark 报 `degrade_code=2107` 并丢弃整个画板，只列非零状态；**`overwrite` 丢画板是高概率偶发，必须当作常态来防**（2026-09-24 同日 3 次 overwrite：2 次报 `degrade_code=2107` 且画板消失、1 次正常保留；同一份分行写法的 XML 时而成功时而失败，与内容无关）→ **无论 `ok`/`warnings` 如何，每次 overwrite/create 后都要 fetch 校验 `<whiteboard` 是否存在（`whiteboard count` 必须为 1），缺失就按 doc_template「二、」补插步骤用 `block_insert_after --content -`（stdin 传分行 mermaid）单独补**；
+- mermaid 饼图用 `<whiteboard type="mermaid">`，引号写 `&quot;`；**`pie` 与 `title` 必须分行写**（写成一行 `pie title 会话状态占比（共A个）` 会报 `degrade_code=2107` 并丢弃整个画板，2026-09-24 实测）；**饼图禁写 0 值扇区**（如「未定位 0」）——否则同样 lark 报 `degrade_code=2107` 并丢弃整个画板，只列非零状态（2026-10-10 实测：24 条里未定位为 0，饼图只列「已解决 15」「未标记 9」两个扇区即正常）；
+- **`degrade_code=2107` 是服务端随机偶发，首选对策是「原样重试」**（2026-09-24 / 2026-10-10 多次实测：同一份分行写法的 XML 时而成功时而失败，与内容、扇区数都无关；`create` / `overwrite` / `block_insert_after` 都可能命中）。**处置固定三步：① 校验 → ② 缺失则原样重试 → ③ 仍失败再排查内容**：
+  - ① **无论 `ok`/`warnings` 如何，每次 create/overwrite 后必须 `docs +fetch` 校验 `<whiteboard` 存在（count 必须为 1）**——报 2107 时画板必丢，不报也可能丢；
+  - ② 缺失就按 doc_template「二、」补插：`docs +fetch --detail with-ids` 取「二、」标题 block_id → `docs +update --command block_insert_after --block-id <id> --content -`（stdin 传分行 mermaid，双引号直接写 `"`）。**补插本身同样会偶发 2107（`result=failed` + 附带 `1003 empty content`），此时不要改内容，直接重跑同一条命令即可成功**（2026-10-10 实测：第一次 failed，原样第二次 success）；
+  - ③ 连续重试仍失败，才回到「`pie`/`title` 分行」「不写 0 值扇区」两条内容规则自查；
 - 按人表不含被排除的 owner（liuchunwei）与批量导入；可加一行说明来源构成（如「网页端 35 条 + MCP 通道 24 条」）；
 - 末尾单列一节：**批量导入历史归档（scan-import）**；不进按人/skill/占比统计，条数多时按「skill × 状态」汇总 + 时间范围呈现。
 
@@ -63,6 +70,7 @@ python3 <skill_dir>/scripts/collect_stat.py [--search ...] [--db ...] [--since <
 - **outcome 与 fix 是两个维度**：「已解决/未定位/未标记」是 outcome；「是否优化」针对未定位会话的 fix_status=optimized，二者勿混（**这是内部口径；写进文档要转成业务语言**）；
 - **正文勿露字段名/表名**（2026-09-24 用户反馈）：文档读者是业务/支持同学，`fix_status=optimized` 这类写法看不懂。正文一律说「其中已经在排查工作台标记『已优化』的条数」「批量导入的历史归档」「该账号」等；`outcome`/`created_at`/`owner`/`archives`/`scan-import` 同理不写。取数逻辑不变，只改措辞。定稿句见 doc_template.md「一、」「四、」「七、」「八、」；**注意用 `block_replace` 逐段改已发布文档时，每个 block 的 ID 都会变，别复用旧 ID**；
 - str_replace 对表格/多行不可靠，整篇刷新用 overwrite（此文档为纯统计内容，overwrite 安全）；
+- **`degrade_code=2107`（画板解析失败）是随机偶发，先重试、别改内容**：`create` / `overwrite` / `block_insert_after` 都可能命中；**补插的 `block_insert_after` 也可能第一次 `failed`（附 `1003 empty content`），原样重跑即成功**（2026-10-10 实测）。故 create/overwrite 后必须 `docs +fetch` 校验 `whiteboard count==1`，缺失就补插、补插失败就原样重试；连续重试仍失败才查内容（`pie`/`title` 分行、不写 0 值扇区）。详见 doc_template.md「二、」关键坑 1-3；
 - **`wiki +space-list` 不返回个人文档库 `my_library`**（CLI 提示：底层 API 从不返回个人库）：历史的周文档父节点曾建在个人库 `7314274064414457859`，虽在列表里查不到但 space 一直正常存在——**别因列表缺项就判定 space 被删**，要用 `wiki spaces get --params '{"space_id":"<id>"}'` 单查。现已整体迁到团队 space《交付团队》`7620832102451285220`，不会再遇到该情形；
 - 执行 SQL 的别名：FROM archives 未加别名时不要用 `a.` 前缀。
 
