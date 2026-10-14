@@ -51,6 +51,8 @@ lark-cli auth status
 | `okr:okr.progress:readonly` | 读取进展记录和进度百分比（需企业管理员审批）|
 | `calendar:calendar.event:read` | 读取日历（复盘用） |
 
+**实测注意**：读取**他人 OKR**（如领导分享的 `.../okr/user/<user_id>/?okrId=<okr_id>`）时，若用 `user_id` 作为 `user_id_type` 会额外要求 `contact:user.employee_id:readonly`。**优先用对方的 `open_id` 调 v1 API**（`contact +search-user --query "<姓名>"` 可取 `open_id`），可避免补授权。
+
 - 所有权限已存在 → 直接开始操作
 - 有缺失 → 只补授权**缺失的部分**，一次统一补全，本次会话不再重复授权：
 
@@ -106,7 +108,13 @@ lark-cli okr +cycle-detail --cycle-id <cycle_id>
 
 > 要实现这个 O，你认为最关键的 2-3 个结果是什么？如果这些结果都达成了，O 也就实现了吗？
 
-按「KR 撰写规则」（见文末 Reference）逐一检查，不符合则追问。KR 内容必须来自用户，数字和指标必须是用户说出来的，用户回答模糊时继续追问而不生成——生成没有数字的 KR 等于帮用户逃避思考。
+按「KR 撰写规则」（见文末 Reference）逐一检查，不符合则追问。KR 内容必须来自用户，数字和指标必须是用户说的，用户回答模糊时继续追问而不生成——生成没有数字的 KR 等于帮用户逃避思考。
+
+> 🚨 **凡涉及"现状 / 已有能力 / 新增 X"的 KR，先核实基线再落笔（实测踩坑）**
+> 不要凭记忆或周报印象推断"现在还没有 X"。**先去代码/文档/数据里查清实际现状**，再写 KR——否则会把上个周期已完成的事写成新目标，KR 立论不成立。
+> - 例：写「新增某平台支持」前，先 `ls` 该 skill 的 `references/` 目录确认真实已覆盖范围；
+> - 例：写「从 N 扩充到 M」前，先统计当前实际条数（`ls .../*.md | wc -l`）。
+> 核实到的基线数字可直接写进 KR（如「由当前 6 个扩充至 ≥20 个」），比空泛目标更有说服力，也便于后续验收。
 
 ### 第六步：确认权重和截止时间
 
@@ -139,6 +147,9 @@ lark-cli okr +cycle-detail --cycle-id <cycle_id>
 
 ```bash
 # 创建目标（category_id 和 deadline 实际必填，不传会报 1001001）
+# category_id 取法：优先用第二步读到的已有 O；若本轮为空（如新季度首次撰写），用下方命令获取
+#   lark-cli okr categories list --params '{"owner_type":"user","page_size":100}' --as user
+#   → 常见为 P0 承诺型 / P1 挑战型，按用户选择取 id
 lark-cli okr cycle.objectives create \
   --params '{"cycle_id": "<cycle_id>"}' \
   --data '{
@@ -186,8 +197,23 @@ lark-cli okr objectives key_results_weight \
 ```bash
 lark-cli okr objective.alignments create \
   --params '{"objective_id": "<用户的objective_id>"}' \
-  --data '{"to_okr_objective_id": "<上层目标的objective_id>"}'
+  --data '{"to_entity_id": "<上层目标的objective_id>", "to_entity_type": 2}'
 ```
+
+> 🚨 **字段名以 schema 为准（实测踩坑）**：对齐接口的 body 字段是 **`to_entity_id` + `to_entity_type`**（`to_entity_type: 2` 表示 Objective），**不是** `to_okr_objective_id`——用错会报 `99992402 field validation failed`。可用 `lark-cli schema okr.objective.alignments.create` 复核。
+> ⚠️ **objective_id 务必从接口返回值程序化取用**，不要手工抄写——长 ID 手抄极易漏位，报 `1001004 okr data not found`。
+
+> ⚠️ **对齐回读：查不到 ≠ 丢了（实测踩坑，勿误判）**
+> `objective.alignments list` 有**读取延迟**：刚写完（`create` / `objectives patch` / 权重调整）立即查询，**可能返回 0 条**，`aligned_objective_list` 字段同样为空——但**对齐关系其实在**。
+> 判据：对同一条对齐重复 `create` 会**返回完全相同的 `alignment_id`**（幂等），说明它一直都在，只是没读出来。
+> **正确做法**：写完对齐后**等待 10 秒以上再回读**；若仍为 0，再多等一次确认。
+> 实测延迟区间：**5 秒可能读到 0 条、7 秒仍可能为 0、10 秒以上才稳定读到**——延迟长短会波动，别用固定"等几秒"来判定。
+> ⚠️ 同一次 `patch` 会影响**所有 O** 的对齐读取（改 O2 的 KR，O1 的对齐也暂时读不到），故须按 O 逐个复核、必要时多次重试。
+> ```bash
+> lark-cli okr objective.alignments list --params '{"objective_id":"<oid>"}' --as user --format json
+> ```
+> **务必按 `objective_id` 逐个核对**——不同 O 的读取延迟不一致，可能出现「一个读到、一个还是 0」，这正是延迟而非真的丢失。
+> ⛔ **不要看到 0 条就立刻重复 create**——虽然幂等不会产生脏数据，但会把延迟误判为故障，并导致后续判断全盘走偏。
 
 **问题二：自下而上的目标**
 
@@ -354,7 +380,7 @@ lark-cli api GET /open-apis/okr/v1/users/<leader_open_id>/okrs \
 ```bash
 lark-cli okr objective.alignments create \
   --params '{"objective_id": "<用户的objective_id>"}' \
-  --data '{"to_okr_objective_id": "<上级的objective_id>"}'
+  --data '{"to_entity_id": "<上级的objective_id>", "to_entity_type": 2}'
 ```
 
 写入成功后展示更新后的对齐全图。
@@ -456,3 +482,20 @@ KR 要体现价值，而不只是完成事情：
 
 **3. 自闭原则**
 所有 KR 都达成了，O 是否也实现了？如果不是，KR 拆解不完整，需要补充或调整。
+
+**4. 基线核实原则**
+凡 KR 中出现"新增 / 扩充 / 提升 / 从 A 到 B"这类**相对表述**，必须先核实**当前实际基线**，不得凭印象推断：
+- 先查代码/文档/数据的真实现状（如 `ls references/` 看已覆盖内容、`wc -l` 数当前条数）；
+- 基线确认后，KR 可写成「由当前 N 提升至 ≥M」，目标可验证、也便于验收；
+- ⛔ **最典型的错误**：把上个周期已完成的能力写成新目标（如已支持 19 个平台，却写"新增某平台"）——这类 KR 立论不成立，无法交付。
+
+**5. 不重叠原则**
+同一 O 下的 KR 应落在**不同维度**（如"产出量 / 质量 / 使用度"），避免同一批产出被多条 KR 重复计数：
+- 反例：KR1「沉淀知识文档 ≥20 篇」+ KR3「回流知识条目 ≥20 条」——若两者出自同一批产出，会出现重复计数；
+- 正例：KR1 按**产出形态**（文档/清单）、KR2 按**质量**（经审核验证）、KR3 按**使用度**（被检索复用），维度互斥。
+
+**6. 职责归属原则**
+写 KR 前确认两个问题：**① 这件事的现成机制是否已存在？② 第一责任人是不是你？**
+- ⛔ **不要照搬上层 OKR 里已委派给他人的 KR**：若领导 KR 明确标注了执行人（如 `@某某`），照搬进自己的 OKR 会造成**目标重复、责任不清**，且侵占他人职责。你的 KR 应写**你在其中的独特贡献**（如「作为知识贡献者持续回流内容」），而非「建立整套机制」。
+- ⛔ **不要写"建立 X 机制/体系"，除非确认它尚不存在**：很多机制已在运行（有 CLI、有 skill、有配套流程），写"建立"等于把已完成的事当新目标。**先核实该机制是否存在**（查 CLI 命令、查 skill 目录、问用户），再决定措辞是"建立"还是"持续使用/深化"。
+- **判据**：能否用一句话说清「**这个结果由我负责交付**」？说不清就说明职责不属于你。
